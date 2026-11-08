@@ -22,7 +22,7 @@ a new minor version adds features, a patch fixes them.
   the radio for you, and your push-to-talk isn't recorded or transcribed: you're talking to a person through the
   network's own client. The copilot carries on with its callouts, checklists and warnings on the intercom; a call it
   would have made on the radio it hands to you. Off their frequency, or once they log off, LocalTC's ATC takes the
-  flight on from where it is. The ATC tab lists who's online on the route, who covers you and who you're on.
+  flight on from where it is. The choice can be changed in flight too: it applies at once, nothing restarted.
 - **The flight's frequencies on the Live Map:** a table on the left with every airspace of the flight in the order it's
   flown (the departure's delivery, ground, tower and departure, each FIR along the route, the arrival, tower and ground),
   its frequency, and who works it: LocalTC's controller, or the online network's (marked where it's top-down, working a

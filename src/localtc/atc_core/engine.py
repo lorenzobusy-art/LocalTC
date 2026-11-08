@@ -840,8 +840,9 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
             self._seen_airborne.update(target.object_id for target in event.targets if not target.on_ground)
             self._note_wake(event.t)
         elif isinstance(event, OnlineAtc):
-            if event.network == self.cfg.online_network:
-                self.online = event.controllers
+            if (event.network or "") != self.cfg.online_network:
+                out += self._online_switch(event.network)  # the pilot changed it in flight: from now on
+            self.online = event.controllers if self.cfg.online_network else ()
         elif isinstance(event, OwnshipState):
             out += self._on_ownship(event)
         elif isinstance(event, PttPressed):
@@ -1585,9 +1586,24 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
         self.state.pending = None
         self._joining = None
 
-    def _online_back(self, own: OwnshipState, left: OnlineController, net: str) -> list[BusEvent]:
-        """Off the online controller's frequency (retuned, or they're gone): LocalTC's ATC takes the flight on from where
-        it is, as if it had just joined it (what the network's controllers gave is taken as given)."""
+    def _online_switch(self, network: str) -> list[BusEvent]:
+        """The pilot chose another network in flight (Only LocalTC, VATSIM hybrid, IVAO hybrid): from now on, nothing
+        restarted. With COM1 on the old network's controller, LocalTC takes the flight on from where it is."""
+        was, old = self.online_tuned, self.cfg.online_network
+        self.cfg.online_network = network if network in online_atc.NETWORKS else ""
+        self.online, self.online_best, self.online_tuned, self.online_gap = (), None, None, None
+        self._online_told.clear()
+        logging.getLogger(__name__).info("ATC: online network now %s", self.cfg.online_network or "none")
+        own = self.state.aircraft
+        if was is None or own is None:
+            return []
+        now = online_atc.network_name(self.cfg.online_network) if self.cfg.online_network else "LocalTC only"
+        return self._online_back(own, was, online_atc.network_name(old), why=f"{now} now")
+
+    def _online_back(self, own: OwnshipState, left: OnlineController, net: str, *, why: str = "") -> list[BusEvent]:
+        """Off the online controller's frequency (retuned, they're gone, or the pilot left the network): LocalTC's ATC
+        takes the flight on from where it is, as if it had just joined it (what the network's controllers gave is taken
+        as given)."""
         st, t = self.state, own.t
         gone = all(c.callsign != left.callsign for c in self.online)
         st.comms.last_atc_t = st.comms.last_pilot_t = t  # no "how do you read?" the moment it's back
@@ -1597,7 +1613,7 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
         elif phase is not P.PARKED:
             st.clearances.setdefault("ifr", Clearance("ifr", "clearance.ifr", "clearance", t, readback="correct"))
         logging.getLogger(__name__).info("ATC: off %s %s, LocalTC back", net, left.callsign)
-        why = f"{left.callsign} has left {net}" if gone else f"off {left.callsign}"
+        why = why or (f"{left.callsign} has left {net}" if gone else f"off {left.callsign}")
         return [self._alert(t, "online_back", f"{why}: LocalTC ATC is back")]
 
     def _join_in_progress(self, own: OwnshipState, phase: P) -> None:

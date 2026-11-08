@@ -1123,6 +1123,8 @@ class AppController:
                             "warn")
         if (guide := getattr(self.live, "guide", None) if self.live is not None else None) is not None:
             await guide.set_enabled(cfg.atc.taxi_guide)
+        if self.live is not None and online_network(cfg) != online_network(self.cfg):
+            self.live.set_online_network(online_network(cfg))  # Only LocalTC / VATSIM / IVAO hybrid: at once, in flight
         CLIPS.enabled = cfg.ui.replay_audio
         if not CLIPS.enabled:
             CLIPS.clear()
@@ -1507,6 +1509,12 @@ class AppController:
 
 
 # --- views ----------------------------------------------------------------------------------------------------
+
+
+def online_network(cfg: Config) -> str:
+    """The network a flight is flown beside ("vatsim", "ivao"), or "": LocalTC only (the integration off, or chosen)."""
+    atc = cfg.atc
+    return atc.online_network if atc.online_integration and atc.online_network in ("vatsim", "ivao") else ""
 
 
 def own_view(ev: OwnshipState) -> dict:

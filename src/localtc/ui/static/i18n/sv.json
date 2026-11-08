@@ -1395,17 +1395,11 @@
 "The flight plan's on-block time, and how far off it is by the sim's clock: + late, - to go": "Färdplanens on-block-tid och avvikelsen enligt simulatorns klocka: + sen, - kvar",
 "IBT": "IBT",
 "ATC for this flight": "ATC för den här flygningen",
-"Call them": "Anropa dem",
 "Choose one before you start the flight.": "Välj en innan du startar flygningen.",
-"Covers you": "Täcker dig",
-"From the next flight: restart the flight to fly with it": "Från nästa flygning: starta om flygningen för att flyga med det",
 "LocalTC's controllers for the whole flight.": "LocalTC:s flygledare hela flygningen.",
 "Looking for {0} controllers each minute.": "Söker efter {0}-flygledare varje minut.",
-"On COM1": "På COM1",
 "Online ATC": "Online-ATC",
-"Online on your route": "Online på din rutt",
 "With {0}: LocalTC's ATC is quiet.": "Med {0}: LocalTC:s ATC är tyst.",
-"{0} from the next flight.": "{0} från nästa flygning.",
 "{0} not reached: {1}": "{0} nåddes inte: {1}",
 "{0}: its controllers are looked up once the flight starts.": "{0}: dess flygledare söks upp när flygningen startar.",
 "Airspace": "Luftrum",
@@ -1422,6 +1416,8 @@
 "IVAO hybrid (+ LocalTC)": "IVAO hybrid (+ LocalTC)",
 "Only LocalTC": "Endast LocalTC",
 "VATSIM hybrid (+ LocalTC)": "VATSIM hybrid (+ LocalTC)",
-"VATSIM/IVAO controller integration: on the ATC tab you choose Only LocalTC, VATSIM hybrid or IVAO hybrid for each flight. With a network, its controllers on your route are looked up each minute, the copilot tells you when one covers your airspace and the frequency to set on COM1, and LocalTC's ATC stays quiet while you're on theirs. Where nobody covers you, LocalTC's ATC takes over again. Takes effect on the next flight": "Integrering av VATSIM/IVAO-flygledare: på ATC-fliken väljer du Endast LocalTC, VATSIM hybrid eller IVAO hybrid för varje flygning. Med ett nätverk söks dess flygledare på din rutt upp varje minut, andrepiloten säger till när någon täcker ditt luftrum och vilken frekvens du ska ställa in på COM1, och LocalTC:s ATC är tyst medan du är på deras. Där ingen täcker dig tar LocalTC:s ATC över igen. Gäller från nästa flygning",
-"When a {0} controller is online, they work their position and, top-down, every position below it that nobody's on. In airspace nobody on {1} covers, you're asked to go back to LocalTC. Once the flight plan is loaded, the Live Map shows each airspace, its frequency and who works it.": "När en {0}-flygledare är online sköter den sin position och, uppifrån och ned, varje obemannad position under den. I luftrum som ingen på {1} täcker blir du ombedd att gå tillbaka till LocalTC. När färdplanen är laddad visar Live Map varje luftrum, dess frekvens och vem som sköter det."
+"When a {0} controller is online, they work their position and, top-down, every position below it that nobody's on. In airspace nobody on {1} covers, you're asked to go back to LocalTC. Once the flight plan is loaded, the Live Map shows each airspace, its frequency and who works it.": "När en {0}-flygledare är online sköter den sin position och, uppifrån och ned, varje obemannad position under den. I luftrum som ingen på {1} täcker blir du ombedd att gå tillbaka till LocalTC. När färdplanen är laddad visar Live Map varje luftrum, dess frekvens och vem som sköter det.",
+"Only LocalTC from now": "Endast LocalTC från och med nu",
+"VATSIM/IVAO controller integration: on the ATC tab you choose Only LocalTC, VATSIM hybrid or IVAO hybrid for each flight. With a network, its controllers on your route are looked up each minute, the copilot tells you when one covers your airspace and the frequency to set on COM1, and LocalTC's ATC stays quiet while you're on theirs. Where nobody covers you, LocalTC's ATC takes over again. The choice can be changed in flight too, and applies at once": "Integrering av VATSIM/IVAO-flygledare: på ATC-fliken väljer du Endast LocalTC, VATSIM hybrid eller IVAO hybrid för varje flygning. Med ett nätverk söks dess flygledare på din rutt upp varje minut, andrepiloten säger till när någon täcker ditt luftrum och vilken frekvens du ska ställa in på COM1, och LocalTC:s ATC är tyst medan du är på deras. Där ingen täcker dig tar LocalTC:s ATC över igen. Valet kan ändras även under flygningen och gäller direkt",
+"{0} hybrid from now": "{0} hybrid från och med nu"
 }

@@ -1395,17 +1395,11 @@
 "The flight plan's on-block time, and how far off it is by the sim's clock: + late, - to go": "Время прибытия на стоянку по плану полёта и отклонение по часам симулятора: + опоздание, - осталось",
 "IBT": "IBT",
 "ATC for this flight": "УВД для этого полёта",
-"Call them": "Вызовите их",
 "Choose one before you start the flight.": "Выберите один вариант перед началом полёта.",
-"Covers you": "Покрывает вас",
-"From the next flight: restart the flight to fly with it": "Со следующего полёта: перезапустите полёт, чтобы лететь с ним",
 "LocalTC's controllers for the whole flight.": "Диспетчеры LocalTC на весь полёт.",
 "Looking for {0} controllers each minute.": "Поиск диспетчеров {0} каждую минуту.",
-"On COM1": "На COM1",
 "Online ATC": "Онлайн УВД",
-"Online on your route": "Онлайн на вашем маршруте",
 "With {0}: LocalTC's ATC is quiet.": "С {0}: УВД LocalTC молчит.",
-"{0} from the next flight.": "{0} со следующего полёта.",
 "{0} not reached: {1}": "{0} недоступно: {1}",
 "{0}: its controllers are looked up once the flight starts.": "{0}: его диспетчеры ищутся, как только начнётся полёт.",
 "Airspace": "Воздушное пространство",
@@ -1422,6 +1416,8 @@
 "IVAO hybrid (+ LocalTC)": "IVAO гибрид (+ LocalTC)",
 "Only LocalTC": "Только LocalTC",
 "VATSIM hybrid (+ LocalTC)": "VATSIM гибрид (+ LocalTC)",
-"VATSIM/IVAO controller integration: on the ATC tab you choose Only LocalTC, VATSIM hybrid or IVAO hybrid for each flight. With a network, its controllers on your route are looked up each minute, the copilot tells you when one covers your airspace and the frequency to set on COM1, and LocalTC's ATC stays quiet while you're on theirs. Where nobody covers you, LocalTC's ATC takes over again. Takes effect on the next flight": "Интеграция диспетчеров VATSIM/IVAO: на вкладке ATC для каждого полёта вы выбираете «Только LocalTC», «VATSIM гибрид» или «IVAO гибрид». С сетью её диспетчеры на вашем маршруте ищутся каждую минуту, второй пилот сообщает, когда кто-то из них покрывает ваше воздушное пространство и какую частоту выставить на COM1, а УВД LocalTC молчит, пока вы на их частоте. Там, где вас никто не покрывает, УВД LocalTC снова берёт управление. Действует со следующего полёта",
-"When a {0} controller is online, they work their position and, top-down, every position below it that nobody's on. In airspace nobody on {1} covers, you're asked to go back to LocalTC. Once the flight plan is loaded, the Live Map shows each airspace, its frequency and who works it.": "Когда диспетчер {0} в сети, он ведёт свою позицию и, сверху вниз, каждую свободную позицию ниже. В воздушном пространстве, которое никто в {1} не покрывает, вас попросят вернуться к LocalTC. После загрузки плана полёта Live Map показывает каждое воздушное пространство, его частоту и кто его ведёт."
+"When a {0} controller is online, they work their position and, top-down, every position below it that nobody's on. In airspace nobody on {1} covers, you're asked to go back to LocalTC. Once the flight plan is loaded, the Live Map shows each airspace, its frequency and who works it.": "Когда диспетчер {0} в сети, он ведёт свою позицию и, сверху вниз, каждую свободную позицию ниже. В воздушном пространстве, которое никто в {1} не покрывает, вас попросят вернуться к LocalTC. После загрузки плана полёта Live Map показывает каждое воздушное пространство, его частоту и кто его ведёт.",
+"Only LocalTC from now": "Только LocalTC с этого момента",
+"VATSIM/IVAO controller integration: on the ATC tab you choose Only LocalTC, VATSIM hybrid or IVAO hybrid for each flight. With a network, its controllers on your route are looked up each minute, the copilot tells you when one covers your airspace and the frequency to set on COM1, and LocalTC's ATC stays quiet while you're on theirs. Where nobody covers you, LocalTC's ATC takes over again. The choice can be changed in flight too, and applies at once": "Интеграция диспетчеров VATSIM/IVAO: на вкладке ATC для каждого полёта вы выбираете «Только LocalTC», «VATSIM гибрид» или «IVAO гибрид». С сетью её диспетчеры на вашем маршруте ищутся каждую минуту, второй пилот сообщает, когда кто-то из них покрывает ваше воздушное пространство и какую частоту выставить на COM1, а УВД LocalTC молчит, пока вы на их частоте. Там, где вас никто не покрывает, УВД LocalTC снова берёт управление. Выбор можно менять и в полёте, он действует сразу",
+"{0} hybrid from now": "{0} гибрид с этого момента"
 }

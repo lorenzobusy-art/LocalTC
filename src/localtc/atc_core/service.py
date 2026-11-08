@@ -63,6 +63,7 @@ class AtcService:
         self.atis_source: Callable[[str], list | None] | None = None  # the real ATIS (the app's ``AtisStore.get``)
         # The online network's controllers (``localtc.online.OnlineStore.get``: (list or None, error)), or None: no network.
         self.online_source: Callable[[], tuple] | None = None
+        self.online_network = engine.cfg.online_network  # the network its lists are for (changed in flight: set_online)
         self._online_t = -ONLINE_CHECK_S
         self._online_sent: tuple | None = None
         # Subscribe now, not in run(): a fast source could publish everything before run() starts.
@@ -138,7 +139,7 @@ class AtcService:
     def _fetch_online(self, t: float) -> None:
         """The online network's controllers around the flight and its route, published when they change (recorded, and
         the engine works to them: ``OnlineAtc``)."""
-        network = self.engine.cfg.online_network
+        network = self.online_network
         if self.online_source is None or not network:
             return
         if t - self._online_t < (ONLINE_CHECK_S if self._online_sent is not None else ONLINE_FIRST_S):
@@ -163,6 +164,13 @@ class AtcService:
         if kept != self._online_sent:
             self._online_sent = kept
             self.bus.publish(OnlineAtc(t=t, network=network, controllers=kept, error=error))
+
+    def set_online(self, network: str, source: Callable[[], tuple] | None, t: float) -> None:
+        """Another network chosen in flight ("" LocalTC only): its lists from now on, and the engine told (an
+        ``OnlineAtc`` of it, recorded, with nobody in it yet: the next fetch fills it)."""
+        self.online_network, self.online_source = network, source
+        self._online_sent, self._online_t = None, -ONLINE_CHECK_S
+        self.bus.publish(OnlineAtc(t=t, network=network, controllers=()))
 
     def _near(self, icao: str) -> bool:
         """Within ``ATIS_NEAR_NM`` of ``icao``, the destination, in the air."""

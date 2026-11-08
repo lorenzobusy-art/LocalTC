@@ -849,6 +849,18 @@ class LiveSession:
         if text.strip():
             self.bus.publish(Transcript(t=self.now(), text=text.strip(), radio=2 if radio == 2 else 1, source="typed"))
 
+    def set_online_network(self, network: str) -> None:
+        """Only LocalTC (""), VATSIM or IVAO hybrid, changed in flight: from now on, nothing restarted."""
+        if self.atc is None:
+            return
+        source = None
+        if network and self.session.source_kind == "live":
+            from localtc.online import OnlineStore
+
+            source = OnlineStore(network).get
+        self.atc.set_online(network, source, self.now())
+        log.info("Online ATC: %s from now", network.upper() if network else "LocalTC only")
+
     def file_plan(self, plan) -> None:
         """A flight plan filed with the flight under way: ATC clears the flight with it from now on (a clearance
         already given stands), and the copilot has its numbers."""
@@ -1174,9 +1186,9 @@ async def start_voice(cfg: Config, bus: EventBus, source: SimSource, recorder, e
     service = VoiceService(bus, source.clock.now, transcriber, capture, recorder=recorder, hints=hints,
                            vocabulary=v.vocabulary, tail_s=v.tail_ms / 1000,
                            intercom_language=talked.code if talked is not None else "", intercom_transcriber=talked_to)
-    if engine is not None and engine.cfg.online_network:
+    if engine is not None:
         # On a VATSIM/IVAO controller's frequency the pilot talks to them through the network's client: not transcribed.
-        service.skip_radio = lambda: engine.online_muted
+        service.skip_radio = lambda: getattr(engine, "online_muted", False)
     ptt = None
     if v.ptt == "keyboard":
         from localtc.stt.ptt import KeyboardPtt

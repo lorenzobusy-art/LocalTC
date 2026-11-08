@@ -1395,17 +1395,11 @@
 "The flight plan's on-block time, and how far off it is by the sim's clock: + late, - to go": "L'orario di on-block del piano di volo e lo scarto secondo l'orologio del simulatore: + in ritardo, - mancanti",
 "IBT": "IBT",
 "ATC for this flight": "ATC per questo volo",
-"Call them": "Chiamali",
 "Choose one before you start the flight.": "Scegline uno prima di iniziare il volo.",
-"Covers you": "Ti copre",
-"From the next flight: restart the flight to fly with it": "Dal prossimo volo: riavvia il volo per usarlo",
 "LocalTC's controllers for the whole flight.": "I controllori di LocalTC per tutto il volo.",
 "Looking for {0} controllers each minute.": "Cerco controllori {0} ogni minuto.",
-"On COM1": "Su COM1",
 "Online ATC": "ATC online",
-"Online on your route": "Online sulla tua rotta",
 "With {0}: LocalTC's ATC is quiet.": "Con {0}: l'ATC di LocalTC è in silenzio.",
-"{0} from the next flight.": "{0} dal prossimo volo.",
 "{0} not reached: {1}": "{0} non raggiunto: {1}",
 "{0}: its controllers are looked up once the flight starts.": "{0}: i suoi controllori vengono cercati all'inizio del volo.",
 "Airspace": "Spazio aereo",
@@ -1422,6 +1416,8 @@
 "IVAO hybrid (+ LocalTC)": "IVAO ibrido (+ LocalTC)",
 "Only LocalTC": "Solo LocalTC",
 "VATSIM hybrid (+ LocalTC)": "VATSIM ibrido (+ LocalTC)",
-"VATSIM/IVAO controller integration: on the ATC tab you choose Only LocalTC, VATSIM hybrid or IVAO hybrid for each flight. With a network, its controllers on your route are looked up each minute, the copilot tells you when one covers your airspace and the frequency to set on COM1, and LocalTC's ATC stays quiet while you're on theirs. Where nobody covers you, LocalTC's ATC takes over again. Takes effect on the next flight": "Integrazione controllori VATSIM/IVAO: nella scheda ATC scegli Solo LocalTC, VATSIM ibrido o IVAO ibrido per ogni volo. Con una rete, i suoi controllori sulla tua rotta vengono cercati ogni minuto, il copilota ti avvisa quando uno copre il tuo spazio aereo e la frequenza da impostare su COM1, e l'ATC di LocalTC resta in silenzio mentre sei sulla loro. Dove nessuno ti copre, l'ATC di LocalTC riprende. Ha effetto dal prossimo volo",
-"When a {0} controller is online, they work their position and, top-down, every position below it that nobody's on. In airspace nobody on {1} covers, you're asked to go back to LocalTC. Once the flight plan is loaded, the Live Map shows each airspace, its frequency and who works it.": "Quando un controllore {0} è online, copre la sua posizione e, a piramide verso il basso, ogni posizione sotto di lui senza nessuno connesso. Negli spazi aerei che nessuno su {1} copre, ti verrà chiesto di tornare su LocalTC. Una volta caricato il piano di volo, la Live Map mostra ogni spazio aereo, la sua frequenza e chi lo copre."
+"When a {0} controller is online, they work their position and, top-down, every position below it that nobody's on. In airspace nobody on {1} covers, you're asked to go back to LocalTC. Once the flight plan is loaded, the Live Map shows each airspace, its frequency and who works it.": "Quando un controllore {0} è online, copre la sua posizione e, a piramide verso il basso, ogni posizione sotto di lui senza nessuno connesso. Negli spazi aerei che nessuno su {1} copre, ti verrà chiesto di tornare su LocalTC. Una volta caricato il piano di volo, la Live Map mostra ogni spazio aereo, la sua frequenza e chi lo copre.",
+"Only LocalTC from now": "Solo LocalTC da adesso",
+"VATSIM/IVAO controller integration: on the ATC tab you choose Only LocalTC, VATSIM hybrid or IVAO hybrid for each flight. With a network, its controllers on your route are looked up each minute, the copilot tells you when one covers your airspace and the frequency to set on COM1, and LocalTC's ATC stays quiet while you're on theirs. Where nobody covers you, LocalTC's ATC takes over again. The choice can be changed in flight too, and applies at once": "Integrazione controllori VATSIM/IVAO: nella scheda ATC scegli Solo LocalTC, VATSIM ibrido o IVAO ibrido per ogni volo. Con una rete, i suoi controllori sulla tua rotta vengono cercati ogni minuto, il copilota ti avvisa quando uno copre il tuo spazio aereo e la frequenza da impostare su COM1, e l'ATC di LocalTC resta in silenzio mentre sei sulla loro. Dove nessuno ti copre, l'ATC di LocalTC riprende. La scelta si può cambiare anche in volo e vale subito",
+"{0} hybrid from now": "{0} ibrido da adesso"
 }

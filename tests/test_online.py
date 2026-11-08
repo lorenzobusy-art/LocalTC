@@ -93,11 +93,12 @@ def test_localtc_takes_over_when_the_online_controller_leaves():
     assert back.detail == "KPAE_GND has left IVAO: LocalTC ATC is back" and not engine.online_muted
 
 
-def test_without_a_network_the_online_controllers_change_nothing():
+def test_without_a_network_nothing_is_online_and_localtc_answers_everywhere():
     engine, own = parked_engine()
-    engine.handle(OnlineAtc(t=1, network="vatsim", controllers=(ctl("KPAE_DEL", 128.0),)))
     outputs = engine.handle(msgspec.structs.replace(own, t=2, com1_mhz=128.0))
-    assert not engine.online_muted and alerts(outputs, "online") == []
+    assert not engine.online_muted and engine.online == () and alerts(outputs, "online") == []
+    engine.handle(OnlineAtc(t=3, network="", controllers=()))  # "Only LocalTC" chosen again: nothing changes
+    assert engine.cfg.online_network == "" and not engine.online_muted
 
 
 def test_the_service_publishes_the_controllers_around_the_flight():
@@ -309,3 +310,68 @@ def test_the_flights_frequency_table_says_who_works_each_airspace_top_down():
     assert rows["Seattle Center (KZSE)"][0] == "LocalTC"
     # ... and the ATC flies by the same rule: parked at Paine, it's the tower the pilot is sent to.
     assert online_atc.best(engine.online, own, "PARKED").callsign == "KPAE_TWR"
+
+
+# --- the network changed in flight: at once, nothing restarted ---------------------------------------------------
+
+
+def test_leaving_the_network_in_flight_on_their_frequency_hands_the_flight_back_to_localtc():
+    engine, own = parked_engine(online_network="vatsim")
+    engine.handle(OnlineAtc(t=1, network="vatsim", controllers=(ctl("KPAE_GND", 121.8),)))
+    engine.handle(msgspec.structs.replace(own, t=2, com1_mhz=121.8))
+    assert engine.online_muted
+    (back,) = alerts(engine.handle(OnlineAtc(t=3, network="", controllers=())), "online_back")
+    assert back.detail == "LocalTC only now: LocalTC ATC is back" and not engine.online_muted
+    assert engine.cfg.online_network == "" and engine.online == ()
+    outputs = engine.handle(msgspec.structs.replace(own, t=4, com1_mhz=121.8))
+    assert not engine.online_muted and alerts(outputs, "online") == []  # no network: nobody announced
+
+
+def test_choosing_a_network_in_flight_starts_looking_for_its_controllers():
+    engine, own = parked_engine()  # flown LocalTC only
+    engine.handle(OnlineAtc(t=1, network="ivao", controllers=()))  # chosen: nobody known yet
+    assert engine.cfg.online_network == "ivao"
+    engine.handle(OnlineAtc(t=2, network="ivao", controllers=(ctl("KPAE_DEL", 128.0),)))
+    (told,) = alerts(engine.handle(msgspec.structs.replace(own, t=3)), "online")
+    assert told.detail.startswith("IVAO connection for this airspace: KPAE_DEL")
+
+
+def test_the_service_switches_its_lists_to_the_network_chosen_in_flight():
+    engine, own = parked_engine(online_network="vatsim")
+    bus = EventBus()
+    seen = bus.subscribe(OnlineAtc)
+    service = AtcService(engine, bus)
+    service.online_source = lambda: ((ctl("KPAE_TWR", 132.95),), "")
+    service._fetch_online(10.0)
+    service.set_online("ivao", lambda: ((ctl("KPAE_GND", 121.8),), ""), 20.0)
+    service._fetch_online(21.0)  # the new network's list at once, under its name (never the old one's)
+
+    async def three():
+        return [await asyncio.wait_for(seen.__anext__(), 1) for _ in range(3)]
+
+    first, switch, second = asyncio.run(three())
+    assert (first.network, switch.network, second.network) == ("vatsim", "ivao", "ivao")
+    assert switch.controllers == () and second.controllers[0].callsign == "KPAE_GND"
+
+
+def test_the_choice_saved_in_flight_reaches_the_running_flight_at_once(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+
+    from localtc.config import Config
+    from localtc.ui.controller import AppController
+
+    monkeypatch.setenv("LOCALTC_SETTINGS", str(tmp_path / "settings.toml"))
+    cfg = Config()
+    cfg.atc.online_integration, cfg.atc.online_network = True, "local"
+    controller = AppController(cfg, plan_path=tmp_path / "flightplan.json", cache=None)
+    switched = []
+    controller.live = SimpleNamespace(set_online_network=switched.append, engine=None, crew=None, speaker=None,
+                                      voice=None, guide=None, copilot_mode="off", recording=None)
+
+    def save(network):
+        return asyncio.run(controller.api_save_settings({"settings": {"atc": {"online_network": network}}}))
+
+    save("vatsim")
+    save("vatsim")  # the same again: nothing to change
+    save("local")
+    assert switched == ["vatsim", ""]

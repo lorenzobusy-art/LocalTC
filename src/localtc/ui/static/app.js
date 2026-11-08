@@ -494,8 +494,8 @@ $("#btn-startstop").onclick = async () => {
 
 /* ---------- VATSIM/IVAO beside LocalTC ---------- */
 
-// [atc] online_integration on: the ATC tab asks which ATC the flight is flown with (Start waits for it), and lists the
-// network's controllers around the flight: the one covering you, the one you should call, the one you're on.
+// [atc] online_integration on: the ATC tab asks which ATC the flight is flown with (Start waits for it; changed in
+// flight, it applies at once) and says where things stand. Who works what is on the Live Map's frequency table.
 const Online = {
   NAMES: { local: "LocalTC", vatsim: "VATSIM", ivao: "IVAO" },
   unchosen() { const o = S.state?.online; return !!(o && o.integration && !o.network); },
@@ -506,7 +506,7 @@ const Online = {
       if (S.settings) S.settings.settings.atc.online_network = network;
       this.render();
       const flying = S.state.status === "running" || S.state.status === "starting";
-      if (flying) toast("From the next flight: restart the flight to fly with it");
+      if (flying) toast(network === "local" ? "Only LocalTC from now" : `${this.NAMES[network]} hybrid from now`);
     } catch (e) { fail(e); }
   },
   render() {
@@ -522,14 +522,11 @@ const Online = {
     else if (o.network === "local") note.textContent = "LocalTC's controllers for the whole flight.";
     else if (o.active && o.muted) note.textContent = `With ${net}: LocalTC's ATC is quiet.`;
     else if (o.active) note.textContent = o.error ? `${net} not reached: ${o.error}` : `Looking for ${net} controllers each minute.`;
-    else if (S.state.status === "running" || S.state.status === "starting") note.textContent = `${this.NAMES[o.network]} from the next flight.`;
+    else if (S.state.status === "running" || S.state.status === "starting") note.textContent = `Looking for ${this.NAMES[o.network]} controllers each minute.`;
     else note.textContent = `${this.NAMES[o.network]}: its controllers are looked up once the flight starts.`;
     const rule = $("#online-rule"), chosen = this.NAMES[o.network];
     rule.hidden = !(o.network === "vatsim" || o.network === "ivao");
     rule.textContent = rule.hidden ? "" : `When a ${chosen} controller is online, they work their position and, top-down, every position below it that nobody's on. In airspace nobody on ${chosen} covers, you're asked to go back to LocalTC. Once the flight plan is loaded, the Live Map shows each airspace, its frequency and who works it.`;
-    const list = o.active ? (o.controllers || []).slice(0, 24) : [];
-    $("#online-list").innerHTML = list.map((c) => `<span class="${c.tuned ? "on-tuned" : c.best ? "on-best" : c.covering ? "on-here" : ""}"
-      translate="no" title="${c.tuned ? "On COM1" : c.best ? "Call them" : c.covering ? "Covers you" : "Online on your route"}">${esc(c.callsign)} ${c.mhz.toFixed(3)}</span>`).join("");
   },
 };
 $$("[data-online]").forEach((b) => (b.onclick = () => Online.choose(b.dataset.online)));
@@ -2150,7 +2147,7 @@ const Settings = {
             The METAR is aviationweather.gov's; only the airport codes are sent. Once you're at or near an airport, the weather the sim has there wins over any real-world
             report, so ATC never gives you conditions you aren't flying in; the ATIS says when the two differ. Each ATIS shows
             where it's from and how old it is. Takes effect on the next flight.</span></label></div>
-        <label class="check-row"><input type="checkbox" id="s-online" ${st.atc.online_integration ? "checked" : ""}> VATSIM/IVAO controller integration: on the ATC tab you choose Only LocalTC, VATSIM hybrid or IVAO hybrid for each flight. With a network, its controllers on your route are looked up each minute, the copilot tells you when one covers your airspace and the frequency to set on COM1, and LocalTC's ATC stays quiet while you're on theirs. Where nobody covers you, LocalTC's ATC takes over again. Takes effect on the next flight</label>
+        <label class="check-row"><input type="checkbox" id="s-online" ${st.atc.online_integration ? "checked" : ""}> VATSIM/IVAO controller integration: on the ATC tab you choose Only LocalTC, VATSIM hybrid or IVAO hybrid for each flight. With a network, its controllers on your route are looked up each minute, the copilot tells you when one covers your airspace and the frequency to set on COM1, and LocalTC's ATC stays quiet while you're on theirs. Where nobody covers you, LocalTC's ATC takes over again. The choice can be changed in flight too, and applies at once</label>
         <label class="check-row"><input type="checkbox" id="s-range" ${st.atc.radio_range ? "checked" : ""}> Radio range: an airport's frequencies work only near it (tower 20-60 nm, ground a few miles)</label>
         <label class="check-row"><input type="checkbox" id="s-personalities" ${st.atc.personalities !== false ? "checked" : ""}> Controllers with personalities: each station has its own controller (calm, formal, friendly, strict, hurried, dry or conversational), the same through a flight (a new shift after a break of 5 hours or more), in their greetings, acknowledgements, corrections, pace, and the language model's wording. Never in the instructions themselves</label>
         <label class="check-row"><input type="checkbox" id="s-humanize" ${st.atc.humanize !== false ? "checked" : ""}> Natural speech: controllers and the other pilots now and then say "uh" as people do (more from a conversational controller, hardly any from a strict one or on a busy frequency). Only in what's said, never inside a number or in anything urgent</label>
