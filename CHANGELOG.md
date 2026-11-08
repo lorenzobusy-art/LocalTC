@@ -9,10 +9,14 @@ a new minor version adds features, a patch fixes them.
 ### Added
 - **VATSIM/IVAO controller integration:** turn it on in Quick Settings → ATC, and the ATC tab asks before each flight
   whether it's flown with Local ATC, VATSIM or IVAO (Start waits for the choice). With a network, its controllers around
-  the route are looked up each minute from its public data feed. When one covers your airspace for the phase you're in
-  (delivery, ground, tower, approach or centre, the next one up where a position isn't staffed), the copilot says
-  "VATSIM connection for this airspace, set 121.800 on COM1". While COM1 is on their frequency LocalTC's controllers,
-  its other traffic and the radio copilot stay quiet. Off their frequency, or once they log off, LocalTC's ATC takes the
+  the route are looked up each minute from its public data feed. Their sectors are LocalTC's own: a centre works its FIR
+  and an approach its approach area, the same outlines LocalTC hands flights between and the Live Map draws; delivery,
+  ground and tower work the field. When one covers your airspace for the phase you're in (the next one up where a
+  position isn't staffed), the copilot says "VATSIM connection for this airspace, set 121.800 on COM1". While COM1 is on
+  their frequency (or the network's ATIS), LocalTC's controllers and its other traffic stay quiet, nothing is said on
+  the radio for you, and your push-to-talk isn't recorded or transcribed: you're talking to a person through the
+  network's own client. The copilot carries on with its callouts, checklists and warnings on the intercom; a call it
+  would have made on the radio it hands to you. Off their frequency, or once they log off, LocalTC's ATC takes the
   flight on from where it is. The ATC tab lists who's online on the route, who covers you and who you're on.
 - **Ground crew:** the turnaround and the push by voice, with no menus. Call them on the ramp frequency, 119.990 at every
   airport (RAMP in the frequency list, or "tune ramp" to the copilot), or on the intercom starting with "ramp". Off by

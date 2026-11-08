@@ -1359,6 +1359,9 @@ class Monitor(WatchMixin):
         st = self.engine.state if self.engine is not None else None
         if st is None:
             return
+        if getattr(self.engine, "online_muted", False):
+            self.handoff = None  # with an online controller: LocalTC's handoffs are no reminders to give
+            return
         if self.handoff is not None:
             when, facility = self.handoff
             tuned = st.comms.tuned

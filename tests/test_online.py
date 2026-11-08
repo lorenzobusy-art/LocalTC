@@ -11,7 +11,7 @@ from localtc.atc_core import online as online_atc
 from localtc.atc_core.service import AtcService
 from localtc.bus import EventBus
 from localtc.online import OnlineStore, parse_ivao, parse_vatsim
-from localtc.sim_api import AtcAlert, OnlineAtc, OnlineController, RadioTuned
+from localtc.sim_api import AtcAlert, OnlineAtc, OnlineController, RadioTuned, Transcript
 
 LAT, LON = kpae().lat, kpae().lon
 
@@ -167,3 +167,69 @@ def test_com1_on_the_networks_atis_keeps_localtc_quiet_and_is_never_the_one_to_c
     engine.handle(OnlineAtc(t=1, network="vatsim", controllers=(atis,)))
     outputs = engine.handle(msgspec.structs.replace(own, t=2, com1_mhz=128.65))
     assert engine.online_muted and engine.online_best is None and alerts(outputs, "online") == []
+
+
+def test_on_the_networks_frequency_the_radio_key_records_and_transcribes_nothing():
+    from test_stt import FakeCapture, FakeTranscriber
+
+    from localtc.stt.service import VoiceService
+
+    def press_and_release(online: bool):
+        async def main():
+            bus = EventBus()
+            capture, transcriber = FakeCapture(2.0), FakeTranscriber()
+            service = VoiceService(bus, lambda: 1.0, transcriber, capture, tail_s=0.0)
+            service.skip_radio = lambda: online
+            heard = bus.subscribe(Transcript)
+            task = asyncio.create_task(service.run())
+            await asyncio.sleep(0)
+            service.press()
+            await asyncio.sleep(0.01)
+            service.release()
+            await asyncio.sleep(0.05)
+            bus.close()
+            await task
+            return [e async for e in heard], capture, transcriber
+
+        return asyncio.run(main())
+
+    (heard,), capture, transcriber = press_and_release(online=True)
+    assert (heard.text, heard.source) == ("", "cancelled") and capture.began == 0 and transcriber.calls == []
+    (heard,), capture, transcriber = press_and_release(online=False)
+    assert heard.text and capture.began == 1
+
+
+def test_a_centre_works_its_fir_and_an_approach_its_area_as_localtc_draws_them():
+    from localtc.atc_core.airspace import Airspace
+
+    sky = Airspace.load()
+    engine, own = parked_engine()
+    # ZSE_CTR, said to sit far away in Oregon: Seattle Center's outline still covers Paine, as LocalTC's centre does.
+    seattle = ctl("ZSE_CTR", 124.2, lat=44.0, lon=-121.0, kind="CTR")
+    assert online_atc.area_of(seattle).id == "KZSE" and online_atc.covers(seattle, own)
+    # LON_N_CTR has no outline of its name: the one it sits in.
+    london = ctl("LON_N_CTR", 133.7, lat=52.0, lon=-0.5, kind="CTR")
+    assert online_atc.area_of(london) is sky.center_at(52.0, -0.5)
+    # Seattle Approach: the area named for SEA, which works Paine too; not up at FL300.
+    approach = ctl("SEA_APP", 119.2, lat=47.45, lon=-122.31)
+    assert online_atc.area_of(approach).serves("KSEA") and online_atc.covers(approach, own)
+    high = msgspec.structs.replace(own, on_ground=False, alt_indicated_ft=30000, alt_agl_ft=29400)
+    assert not online_atc.covers(approach, high) and online_atc.best([seattle, approach], high, "CRUISE") is seattle
+    # Out of Seattle Center's outline, it's not theirs (a circle would have reached Vancouver Island).
+    victoria = msgspec.structs.replace(own, lat=49.0, lon=-125.5)
+    assert not online_atc.covers(seattle, victoria)
+
+
+def test_the_copilot_keeps_to_the_intercom_on_the_networks_frequency():
+    from test_crew_monitor import FakeEngine, crew, said
+
+    engine = FakeEngine()
+    engine.cfg.online_network = "ivao"
+    engine.online_muted = True
+    pm = crew(engine)
+    item = pm.deck.submit("crew", "request", "ask:1", 1.0, text="Seattle Center, request flight level 380")
+    pm._radio_queue.append(item)
+    out = pm._radio_due(2.0)
+    assert said(out) == ['We\'re on IVAO, that call\'s yours: "Seattle Center, request flight level 380".']
+    assert not [o for o in out if isinstance(o, Transcript)] and pm._radio_queue == []
+    assert said(pm._one_call(3.0, "ground")) == ["We're on IVAO, you'll have to call them yourself."]

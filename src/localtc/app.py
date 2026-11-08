@@ -1174,6 +1174,9 @@ async def start_voice(cfg: Config, bus: EventBus, source: SimSource, recorder, e
     service = VoiceService(bus, source.clock.now, transcriber, capture, recorder=recorder, hints=hints,
                            vocabulary=v.vocabulary, tail_s=v.tail_ms / 1000,
                            intercom_language=talked.code if talked is not None else "", intercom_transcriber=talked_to)
+    if engine is not None and engine.cfg.online_network:
+        # On a VATSIM/IVAO controller's frequency the pilot talks to them through the network's client: not transcribed.
+        service.skip_radio = lambda: engine.online_muted
     ptt = None
     if v.ptt == "keyboard":
         from localtc.stt.ptt import KeyboardPtt
