@@ -207,6 +207,8 @@ pilot_readback = "Descend {altitude}, cleared {approach} approach, {callsign_sho
 id = "approach.checkin_descend_star"
 controller = "approach"
 text = ["{callsign}, {station}, continue descent {altitude}, expect {approach} approach."]
+readback = { required = ["altitude"] }
+pilot_readback = "Continue descent {altitude}, {callsign_short}."
 
 # A speed for the spacing on final, kept to until five miles out (atc_core/conditions.py).
 [[template]]

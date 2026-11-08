@@ -5773,9 +5773,9 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
                 # Checking in on the way down: "continue descent", not "maintain" an altitude still far below.
                 via = self._via_floor is not None and self.cfg.star
                 if via and self.region.icao:
+                    # An altitude said: read back, never "roger"-ed as though it were news.
                     self._schedule(t, "center.checkin_descend_star", {"station": facility.station, "procedure": self.cfg.star,
-                                                                      "altitude": self._via_floor}, facility,
-                                   expects_readback=False)
+                                                                      "altitude": self._via_floor}, facility)
                 elif via:
                     self._schedule(t, "center.checkin_descend_via", {"station": facility.station,
                                                                      "procedure": self.cfg.star}, facility, expects_readback=False)
@@ -5832,7 +5832,7 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
                 self._schedule(t, "approach.checkin_descend_star" if self.region.icao else "approach.checkin_descend_via",
                                {"station": facility.station, "procedure": self.cfg.star, "approach": plan["approach"],
                                 "altitude": self._via_floor}, facility,
-                               expects_readback=False,
+                               expects_readback=bool(self.region.icao),  # ICAO says the altitude: read back
                                on_issue=lambda: self._assign(approach=plan["approach"].display,
                                                              arrival_runway=plan["approach"].landing_runway),
                                note=self._atis_note(st.flight.destination, st.assignments.arrival_atis)

@@ -100,6 +100,8 @@ pilot_readback = "When ready descend {altitude}, cleared {procedure} arrival, {c
 id = "center.checkin_descend_star"
 controller = "center"
 text = ["{callsign}, {station}, roger, continue descent {altitude}, {procedure} arrival."]
+readback = { required = ["altitude"], optional = ["procedure"] }
+pilot_readback = "Continue descent {altitude}, {procedure} arrival, {callsign_short}."
 
 [[template]]
 id = "center.maintain"
