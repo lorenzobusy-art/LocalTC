@@ -162,6 +162,12 @@ def works(c: OnlineController, needed: str, own: OwnshipState) -> bool:
     return covers(c, own)
 
 
+def ranks_for(c: OnlineController, needed: str) -> bool:
+    """``c``'s position is the one ``needed`` or above it (a radar for the cruise, an approach for the arrival):
+    a pilot on their frequency a few miles early was sent there by them, and is with them."""
+    return c.kind in PYRAMID and needed in PYRAMID and PYRAMID.index(c.kind) >= PYRAMID.index(needed)
+
+
 def covering(controllers: Iterable[OnlineController], own: OwnshipState) -> list[OnlineController]:
     return [c for c in controllers if c.kind != "ATIS" and covers(c, own)]
 

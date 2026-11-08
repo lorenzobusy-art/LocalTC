@@ -404,7 +404,11 @@ def test_off_the_network_high_up_the_pilot_is_sent_to_localtcs_centre_not_depart
     engine.handle(climbing)
     assert engine.online_muted
     above = msgspec.structs.replace(climbing, t=3, alt_indicated_ft=25000, alt_msl_ft=25000, alt_agl_ft=24400)
-    (gap,) = alerts(engine.handle(above), "online_gap")  # above FL245: not the approach's any more
+    # Still climbing out with them: theirs to send the flight on ("contact unicom"), not the copilot's to guess.
+    assert alerts(engine.handle(above), "online_gap") == [] and engine.online_muted
+    engine.state.phase = "CRUISE"  # in the cruise, no approach's work: nobody online for it, LocalTC's centre
+    level = msgspec.structs.replace(above, t=3.5, vs_fpm=0)
+    (gap,) = alerts(engine.handle(level), "online_gap")
     assert engine.online_gap.controller == "center" and "Center" in gap.detail
     unicom = msgspec.structs.replace(above, t=4, com1_mhz=122.8)  # "contact unicom 122.8", as the controller says
     back = engine.handle(unicom)
@@ -517,3 +521,19 @@ def test_an_approach_without_an_outline_works_its_own_fir_not_the_next_countrys_
     linate = online_atc.point(45.445, 9.277, ground=True, alt_ft=350, agl_ft=0)
     kloten = online_atc.point(47.458, 8.548, ground=True, alt_ft=1400, agl_ft=0)
     assert online_atc.covers(zurich, kloten) and not online_atc.covers(zurich, linate)
+
+
+def test_on_the_next_radar_a_few_miles_before_its_boundary_the_flight_is_with_them():
+    engine, own = parked_engine(online_network="vatsim")
+    vienna = ctl("LOVV_BU_CTR", 136.39, lat=48.1, lon=16.5, kind="CTR")
+    assert online_atc.area_of(vienna).id == "LOVV"
+    # Over Hungary, short of Austria, when Wien Radar asked for the switch on the network's chat.
+    early = msgspec.structs.replace(own, t=2, lat=47.19, lon=16.531, on_ground=False, alt_indicated_ft=32600,
+                                    alt_msl_ft=32600, alt_agl_ft=31100, gs_kt=450, com1_mhz=136.39)
+    assert not online_atc.covers(vienna, early)
+    engine.state.phase = "CRUISE"
+    engine.handle(OnlineAtc(t=1, network="vatsim", controllers=(vienna,)))
+    outputs = engine.handle(early)
+    assert engine.online_muted and alerts(outputs, "online_gap") == []  # never "nobody online" with them right there
+    # Their ground at the runway, nobody above online: that one still is LocalTC's tower to call.
+    assert not online_atc.ranks_for(ctl("KPAE_GND", 121.8), "TWR") and online_atc.ranks_for(vienna, "APP")

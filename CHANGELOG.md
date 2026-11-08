@@ -31,7 +31,9 @@ a new minor version adds features, a patch fixes them.
   online FIR, the next FIR, never LocalTC's version of the one you left), and LocalTC carries on from there with the
   plan. LocalTC's own controllers hand you over too, saying only where ("contact Milano Radar 126.750"); the copilot
   is the one who says it's VATSIM's or IVAO's, once a controller. An online controller that released you isn't
-  proposed again until you've left their airspace.
+  proposed again until you've left their airspace. On an online controller's frequency a few miles before their
+  airspace (they asked on the network's chat), you're with them: no "nobody online" from the copilot; that's only for
+  a position below the one the flight needs (their ground, at the runway) with nobody above online.
 - **The flight's frequencies on the Live Map:** a table on the left with every airspace of the flight in the order it's
   flown (the departure's delivery, ground, tower and departure, each FIR along the route, the arrival, tower and ground),
   its frequency, and who works it: LocalTC's controller, or the online network's (marked where it's top-down, working a

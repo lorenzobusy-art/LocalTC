@@ -1503,7 +1503,10 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
                                  if any(o.callsign == c and online_atc.covers(o, own) for o in self.online)}
         if best is not None and best.callsign in self._online_released:
             self.online_best = best = None  # they let the flight go: LocalTC's (the copilot says which)
-        served = tuned is not None and online_atc.works(tuned, needed, own)  # COM1 on someone doing this phase's job
+        # COM1 on someone doing this phase's job: in their airspace, or a few miles short of it on a position up to it
+        # (Wien Radar called before the boundary: they asked the pilot to, on the network's chat). Only a position
+        # below the one needed (their ground, at the runway) leaves the flight to LocalTC.
+        served = tuned is not None and (online_atc.works(tuned, needed, own) or online_atc.ranks_for(tuned, needed))
         self.online_gap = None
         if tuned is not None:
             self.online_back_to = None
