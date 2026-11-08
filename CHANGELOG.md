@@ -92,6 +92,11 @@ a new minor version adds features, a patch fixes them.
   instead of ATC's "say again".
 
 ### Fixed
+- **Taxi routes said as a controller says them:** numbered pieces of one taxiway one after another are that taxiway
+  ("G1, G2, G3" is "G"); a link on its own stays ("C3, C, C1").
+- **VATSIM / IVAO hybrid flies with the network's traffic:** LocalTC's own real-world flights are off then (chosen
+  in flight too), so the sky isn't two skies on top of each other; ATC sees the network's aircraft the pilot client
+  puts in the sim, for traffic and the runway. Only LocalTC brings LocalTC's traffic back, as set.
 - **The descent says where to stop, in Europe as Europe does:** "descend FL110, cleared TINI9W arrival" at the top of
   descent (not "descend via" alone, the FAA's), "continue descent FL110" from the next centre, and the approach
   clearance on a STAR with the altitude to join the final at ("descend 4,000 feet, cleared ILS runway 09R approach"),

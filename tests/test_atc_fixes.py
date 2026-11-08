@@ -93,3 +93,14 @@ def test_on_a_shared_frequency_the_controller_that_just_sent_the_flight_on_answe
     assert engine._facility_for(120.9) is tower  # in the air: the tower
     engine._last_handoff = (5.0, tower)
     assert engine._facility_for(120.9) is tower
+
+
+def test_numbered_pieces_of_one_taxiway_in_a_row_are_said_as_that_taxiway():
+    from localtc.atc_core.airport.taxi_route import _simplified
+
+    assert _simplified(["G1", "G2", "G3"]) == ["G"]
+    assert _simplified(["G", "G1", "G2", "B"]) == ["G", "B"]
+    assert _simplified(["H1", "H2", "GE", "G1", "G2"]) == ["H", "GE", "G"]
+    assert _simplified(["A", "A1"]) == ["A", "A1"]  # turning off A onto A1: said
+    assert _simplified(["C3", "C", "C1"]) == ["C3", "C", "C1"]  # off the stand on C3, along C, onto C1
+    assert _simplified(["B", "E", "C", "H", "GE"]) == ["B", "E", "C", "H", "GE"]

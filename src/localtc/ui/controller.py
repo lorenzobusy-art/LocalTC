@@ -433,6 +433,10 @@ class AppController:
         cfg.source.kind = self.source_kind
         if self.plan is not None:
             apply_plan(self.plan, cfg.flight)
+        if online_network(cfg):
+            # VATSIM / IVAO hybrid: the network's aircraft are the traffic (the pilot client puts them in the sim, and
+            # ATC sees them there). LocalTC's real-world flights on top would be a second, different sky.
+            cfg.traffic.enabled = False
         return cfg
 
     @property
@@ -1113,7 +1117,8 @@ class AppController:
             if crew.model is not None:  # the copilot's model: its use and its checks from the next question
                 crew.model.mode = "off" if cfg.crew.llm == "off" else cfg.crew.mode
                 crew.model.beyond_facts = cfg.crew.beyond_facts
-        if cfg.traffic.enabled != self.cfg.traffic.enabled and self.live is not None:
+        hybrid = online_network(cfg)  # with a network, its aircraft are the traffic: LocalTC's never started then
+        if cfg.traffic.enabled != self.cfg.traffic.enabled and self.live is not None and not (cfg.traffic.enabled and hybrid):
             await self._traffic_on(cfg)
         if cfg.atc.taxi_guide and not self.cfg.atc.taxi_guide:
             from localtc import simpkg
@@ -1125,6 +1130,10 @@ class AppController:
             await guide.set_enabled(cfg.atc.taxi_guide)
         if self.live is not None and online_network(cfg) != online_network(self.cfg):
             self.live.set_online_network(online_network(cfg))  # Only LocalTC / VATSIM / IVAO hybrid: at once, in flight
+            if cfg.traffic.enabled:  # LocalTC's traffic off with a network (its aircraft are the traffic), back without
+                flying = msgspec.convert(msgspec.to_builtins(cfg), Config)
+                flying.traffic.enabled = not online_network(cfg)
+                await self._traffic_on(flying)
         CLIPS.enabled = cfg.ui.replay_audio
         if not CLIPS.enabled:
             CLIPS.clear()
