@@ -249,6 +249,12 @@ text = ["{callsign}, {station}, read you five by five.", "{callsign}, {station},
 
 # --- an emergency: priority, then the shortest way to the ground ------------------------------------
 
+# "Cancel the emergency" (a Mayday speech-to-text heard in the noise, or the problem gone): ATC takes it back.
+[[template]]
+id = "common.emergency_cancelled"
+controller = "any"
+text = ["{callsign}, roger, emergency cancelled."]
+
 [[template]]
 id = "common.emergency_priority"
 controller = "any"

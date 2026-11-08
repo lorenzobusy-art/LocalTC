@@ -119,3 +119,20 @@ def test_the_ils_clearance_in_europe_says_the_tower_to_call_when_established():
     assert library.get("approach.cleared").text[0].endswith("when established.")
     assert "when established" in library.get("approach.cleared_star_descend_tower").text[0]
     assert "frequency" in library.get("approach.cleared_star_descend_tower").readback.required
+
+
+def test_an_emergency_is_cancelled_by_voice_and_never_taken_for_another():
+    from test_engine import say, transmissions
+
+    from localtc.atc_core.engine import CANCEL_EMERGENCY
+
+    for said in ("Negative, negative. Cancel the emergency.", "cancelling mayday", "We're no longer an emergency",
+                 "cancel pan pan"):
+        assert CANCEL_EMERGENCY.search(said), said
+    for said in ("Copy information.", "Mayday mayday, engine fire", "emergency equipment standing by?"):
+        assert not CANCEL_EMERGENCY.search(said), said
+    engine, own = parked_engine()
+    say(engine, own, 5, "Mayday mayday, Skyhawk 172LT, engine fire")
+    assert "emergency" in engine.state.flags
+    (cancelled,) = transmissions(say(engine, own, 20, "Negative, negative, cancel the emergency, 172LT"))
+    assert cancelled.instruction_id == "common.emergency_cancelled" and "emergency" not in engine.state.flags

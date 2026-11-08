@@ -351,6 +351,12 @@ class Monitor(WatchMixin):
                                                                    f"{speech.frequency_display(to.mhz)}.", again_s=60.0)
             else:
                 self._call("online_back", SAFETY, t, f"We're out of {net} coverage, LocalTC ATC is back.", again_s=60.0)
+        elif isinstance(ev, AtcAlert) and ev.kind == "emergency_cancelled":
+            # Over (or never one): no more "squawk 7700?", no diversion to offer.
+            self.offer = None
+            self.divert_due = None
+            self.queue = [q for q in self.queue if not q.key.startswith(("emergency", "divert", "nearest"))]
+            self._call("emergency_cancelled", ROUTINE, t, "Emergency cancelled, back to normal ops.", again_s=60.0)
         elif isinstance(ev, AtcAlert) and ev.kind == "emergency":
             self._call("emergency", ROUTINE, t, "Copy the emergency. Want me to squawk 7700?")
             self.offer = Offer("squawk", "7700", t + 20.0)

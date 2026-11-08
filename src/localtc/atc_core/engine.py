@@ -150,6 +150,9 @@ from localtc.sim_api import (
 )
 
 P = FlightPhase
+# "Cancel the emergency", "cancelling mayday", "no longer an emergency", "negative, cancel distress": over.
+CANCEL_EMERGENCY = re.compile(r"\b(?:cancel(?:l?ing|led)?|no longer|negative)\b[\w ,.]{0,25}?\b(?:emergency|mayday|distress"
+                              r"|pan[ -]?pan)\b", re.IGNORECASE)
 ROUTES_FROM_KEPT = 400  # other aircraft's routes from where they were, kept this many at most
 STAR_INTERCEPT_AGL_FT = 3000  # an ILS final joined about this high above the field, where nothing better is known
 KNOWN_FIX_RATIO = 0.6  # a misheard fix name this like a known one is that one ("knob" and NOBKE: 0.67)
@@ -3639,6 +3642,8 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
                 # "Cleared to land 14R, can we make it a low approach?": the readback taken, then the request.
                 out += self._on_request(interp.then, facility, t)
             return out
+        if CANCEL_EMERGENCY.search(ev.text or ""):
+            return out + self._cancel_emergency(ev.text, facility, t)  # before "emergency": it names the word too
         if interp.intent == "emergency":
             return out + self._emergency(interp, facility, t)
         if interp.kind == "request":
@@ -4853,6 +4858,21 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
             self._schedule(t, "common.roger", {}, facility)  # "looking" and "negative contact" need no answer
 
     # --- non-routine: emergencies, questions, requests without a procedure --------------------------------
+
+    def _cancel_emergency(self, text: str, facility: Facility, t: float) -> list[BusEvent]:
+        """"Cancel the emergency", "cancel mayday", "no longer an emergency": the emergency over (or never one: a
+        Mayday speech-to-text made up in the noise at the end of "copy information"). Back to the ordinary flight."""
+        st = self.state
+        if "emergency" not in st.flags:
+            self._schedule(t, "common.roger", {}, facility, expects_readback=False)
+            return []
+        for flag in ("emergency", "emergency_priority", "emergency_priority_due"):
+            st.flags.discard(flag)
+        self._emergency_told = {}
+        if getattr(self, "diversion", None) is not None:
+            self.diversion.offer_due_t = None
+        self._schedule(t, "common.emergency_cancelled", {}, facility, expects_readback=False)
+        return [self._alert(t, "emergency_cancelled", text)]
 
     def _emergency(self, interp: Interpretation, facility: Facility, t: float) -> list[BusEvent]:
         """An emergency declared, and everything that follows from it.

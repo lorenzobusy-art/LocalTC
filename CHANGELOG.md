@@ -99,6 +99,9 @@ a new minor version adds features, a patch fixes them.
   instead of ATC's "say again".
 
 ### Fixed
+- **An emergency can be cancelled:** "cancel the emergency", "cancel mayday", "no longer an emergency" gets "roger,
+  emergency cancelled", and the copilot drops it too (no "squawk 7700?", no diversion offered). It used to be taken for
+  another emergency, priority and all (a Mayday speech-to-text had made up in the noise at the end of a call).
 - **Taxi routes said as a controller says them:** numbered pieces of one taxiway one after another are that taxiway
   ("G1, G2, G3" is "G"); a link on its own stays ("C3, C, C1").
 - **VATSIM / IVAO hybrid flies with the network's traffic:** LocalTC's own real-world flights are off then (chosen
