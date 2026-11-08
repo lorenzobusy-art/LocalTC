@@ -162,6 +162,13 @@ def works(c: OnlineController, needed: str, own: OwnshipState) -> bool:
     return covers(c, own)
 
 
+def airspace_of(c: OnlineController) -> str:
+    """Which airspace a controller works, the same for every sector of it: its outline ("LOVV" for Wien's
+    LOVV_BU_CTR and LOVV_N_CTR alike), else its airport and kind ("LIRF TWR")."""
+    area = area_of(c)
+    return area.id if area is not None else f"{c.callsign.upper().split('_', 1)[0]} {c.kind}"
+
+
 def ranks_for(c: OnlineController, needed: str) -> bool:
     """``c``'s position is the one ``needed`` or above it (a radar for the cruise, an approach for the arrival):
     a pilot on their frequency a few miles early was sent there by them, and is with them."""

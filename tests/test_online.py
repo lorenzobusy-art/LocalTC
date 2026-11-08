@@ -511,7 +511,7 @@ def test_released_by_an_online_controller_they_arent_proposed_again_inside_their
     assert alerts(later, "online") == [] and transmissions(later) == []  # not sent back to them, by anyone
     gone = msgspec.structs.replace(own, t=30, lat=LAT + 1, com1_mhz=122.8)  # out of their airspace ...
     engine.handle(gone)
-    assert "KPAE_GND" not in engine._online_released
+    assert "KPAE GND" in engine._online_released  # left it, but released a while still (a border clipped again)
 
 
 def test_an_approach_without_an_outline_works_its_own_fir_not_the_next_countrys_airports():
@@ -537,3 +537,34 @@ def test_on_the_next_radar_a_few_miles_before_its_boundary_the_flight_is_with_th
     assert engine.online_muted and alerts(outputs, "online_gap") == []  # never "nobody online" with them right there
     # Their ground at the runway, nobody above online: that one still is LocalTC's tower to call.
     assert not online_atc.ranks_for(ctl("KPAE_GND", 121.8), "TWR") and online_atc.ranks_for(vienna, "APP")
+
+
+def test_released_by_one_sector_the_other_sectors_of_that_airspace_arent_proposed_either():
+    engine, own = parked_engine(online_network="vatsim")
+    south = ctl("LOVV_BU_CTR", 136.39, lat=48.1, lon=16.5, kind="CTR")
+    north = ctl("LOVV_N_CTR", 134.35, lat=48.3, lon=15.0, kind="CTR")
+    assert online_atc.airspace_of(south) == online_atc.airspace_of(north) == "LOVV"
+    engine.state.phase = "CRUISE"
+    engine.handle(OnlineAtc(t=1, network="vatsim", controllers=(south, north)))
+    inside = msgspec.structs.replace(own, t=2, lat=46.75, lon=15.3, on_ground=False, alt_indicated_ft=36000,
+                                     alt_msl_ft=36000, alt_agl_ft=34200, gs_kt=450, com1_mhz=136.39)
+    assert online_atc.covers(north, inside)  # still in Austria by the outline, near Slovenia
+    engine.handle(inside)
+    assert engine.online_muted
+    out = engine.handle(msgspec.structs.replace(inside, t=3, com1_mhz=122.8))  # "contact unicom", from Wien
+    assert alerts(out, "online_back") and alerts(out, "online") == []  # not "Wien Radar on 134.35" next
+
+
+def test_a_route_clipping_again_the_airspace_that_let_it_go_stays_where_it_is():
+    engine, own = parked_engine(online_network="vatsim")
+    south = ctl("LOVV_BU_CTR", 136.39, lat=48.1, lon=16.5, kind="CTR")
+    engine.state.phase = "CRUISE"
+    engine.handle(OnlineAtc(t=1, network="vatsim", controllers=(south,)))
+    on_them = msgspec.structs.replace(own, t=2, lat=46.75, lon=15.3, on_ground=False, alt_indicated_ft=36000,
+                                      alt_msl_ft=36000, alt_agl_ft=34200, gs_kt=450, com1_mhz=136.39)
+    engine.handle(on_them)
+    engine.handle(msgspec.structs.replace(on_them, t=3, lat=46.6, lon=15.05, com1_mhz=122.8))  # released, into Slovenia
+    clip = msgspec.structs.replace(on_them, t=200, lat=46.51, lon=14.78, com1_mhz=122.8)  # Austria's tip again
+    out = engine.handle(clip)
+    assert alerts(out, "online") == [] and "LOVV" in engine._online_released
+    assert engine._online_for(engine._center()) is None or engine._center().controller == "center"

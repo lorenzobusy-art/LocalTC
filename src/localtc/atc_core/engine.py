@@ -156,6 +156,7 @@ KNOWN_FIX_RATIO = 0.6  # a misheard fix name this like a known one is that one (
 STAR_FLOOR_MAX_FT = 18000  # a plan's last arrival altitude above this is its predicted profile, not where a STAR ends
 # COM1 on an online network's controller: what LocalTC's ATC would have said, it doesn't (``AtcEngine.online_muted``).
 ONLINE_QUIET = (AtcTransmission, RadioChatter, AtcThinking, ReadbackEvaluated)
+ONLINE_RELEASED_S = 1200.0  # an online airspace that let the flight go isn't proposed again for this long
 ONLINE_TELL_AGAIN_S = 600.0  # a controller the pilot was told of and didn't call: said again after this long
 # The calls to LocalTC's real flights (``traffic_call``), and the controller who makes each.
 TRAFFIC_CALLS = {"clearance": "clearance", "pushback": "ground", "taxi_out": "ground", "taxi_in": "ground",
@@ -724,9 +725,10 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
         self.online_gap: Facility | None = None  # LocalTC's controller for what nobody online works now
         self.online_back_to: Facility | None = None  # ... and the one to go to, just off the network's frequency
         self._online_told: dict[str, float] = {}  # callsign: when the pilot was told to call them
-        # The online controllers that released the flight ("contact unicom"): not proposed again until it has left
-        # their airspace (their outline round the flight is a guess; their word that it's left is not).
-        self._online_released: set[str] = set()
+        # The airspaces whose online controllers released the flight ("contact unicom"): none of that airspace's
+        # controllers (Wien's other sector too) is proposed again until the flight has left it (their outline round
+        # the flight is a guess; their word that it's left is not). By ``online_atc.airspace_of``.
+        self._online_released: dict[str, float] = {}  # airspace: when released
 
     # --- public ---------------------------------------------------------------------------
 
@@ -1499,9 +1501,12 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
         elif was is not None and tuned is None:
             out += self._online_back(own, was, net)
         # Out of a releasing controller's airspace now: theirs to propose again if the flight comes back in.
-        self._online_released = {c for c in self._online_released
-                                 if any(o.callsign == c and online_atc.covers(o, own) for o in self.online)}
-        if best is not None and best.callsign in self._online_released:
+        # A route along a border clips the airspace that let the flight go again a few minutes later (the tip of
+        # Austria between Slovenia and Italy): it stays released a while, whatever the outline says.
+        self._online_released = {a: when for a, when in self._online_released.items()
+                                 if own.t - when < ONLINE_RELEASED_S
+                                 or any(online_atc.airspace_of(o) == a and online_atc.covers(o, own) for o in self.online)}
+        if best is not None and online_atc.airspace_of(best) in self._online_released:
             self.online_best = best = None  # they let the flight go: LocalTC's (the copilot says which)
         # COM1 on someone doing this phase's job: in their airspace, or a few miles short of it on a position up to it
         # (Wien Radar called before the boundary: they asked the pilot to, on the network's chat). Only a position
@@ -1696,7 +1701,7 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
                                                                                            own), own)
         logging.getLogger(__name__).info("ATC: off %s %s, LocalTC back", net, left.callsign)
         if not gone:
-            self._online_released.add(left.callsign)  # they sent the flight on: not proposed again inside their airspace
+            self._online_released[online_atc.airspace_of(left)] = own.t  # sent on: their airspace isn't proposed again
         why = why or (f"{left.callsign} has left {net}" if gone else f"off {left.callsign}")
         return [self._alert(t, "online_back", f"{why}: LocalTC ATC is back")]
 
@@ -6337,6 +6342,7 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
                   "center": "CTR"}.get(facility.controller)
         if needed is None or not self.online:
             return None
+        released = set(self._online_released)
         geo = self.geometry(facility.airport) if facility.airport else None
         if needed == "CTR" or geo is None:
             if own is None:
@@ -6348,7 +6354,8 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
             ground = needed in ("DEL", "GND", "TWR")
             where = online_atc.point(a.lat, a.lon, ground=ground, alt_ft=a.elev_ft + (0 if ground else 6000),
                                      agl_ft=0.0 if ground else 6000.0)
-        return online_atc.pick(self.online, where, needed)
+        found = online_atc.pick(self.online, where, needed)
+        return None if found is not None and online_atc.airspace_of(found) in released else found
 
     def _transmitting(self, t: float) -> bool:
         """True while the pilot holds push-to-talk.
@@ -6700,6 +6707,10 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
         flight stays with the centre it is on. Never on the frequency of the centre the flight is talking to:
         Denver Center handing over to Los Angeles Center on its own 135.45 left the pilot "contacting" LA on the
         same frequency, and Denver answering."""
+        if self._online_released and self._sector is not None and own is not None                 and (area := self.center_area(own)) is not None and area.id in self._online_released:
+            # Clipping again an airspace whose online controller just let the flight go (the tip of Austria, between
+            # Slovenia and Italy): the centre it's with keeps it, as a controller would for a few minutes' worth.
+            return None
         here = self._sector_candidate_on(own, tuple(f.mhz for f in self.facilities if f.controller != "center"))
         now = self._sector
         if here is not None and now is not None and here.station != now.station and \
