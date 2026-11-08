@@ -8,7 +8,7 @@ a new minor version adds features, a patch fixes them.
 
 ### Added
 - **VATSIM/IVAO controller integration:** turn it on in Quick Settings → ATC, and the ATC tab asks before each flight
-  whether it's flown with Local ATC, VATSIM or IVAO (Start waits for the choice). With a network, its controllers around
+  whether it's flown with Only LocalTC, VATSIM hybrid (+ LocalTC) or IVAO hybrid (+ LocalTC), with the rule explained beside it (Start waits for the choice). With a network, its controllers around
   the route are looked up each minute from its public data feed. Their sectors are LocalTC's own: a centre works its FIR
   and an approach its approach area, the same outlines LocalTC hands flights between and the Live Map draws; delivery,
   ground and tower their own airport (a tower its zone too, never the next field's). The networks' top-down rule is

@@ -205,6 +205,7 @@ html[data-theme="daylight"] .mapfreqs { background: rgba(255, 255, 255, .94); co
 .online-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
 .online .seg .btn[aria-pressed="true"] { background: var(--teal); border-color: #41807b; color: #fff; }
 .online-note-need { color: #e0b44c; }
+.online-rule { margin-top: 4px; max-width: 900px; }
 .online-list { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 6px; color: var(--muted); }
 .online-list:empty { display: none; }
 .online-list .on-here { color: var(--text); }

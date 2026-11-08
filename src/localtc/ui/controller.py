@@ -445,7 +445,7 @@ class AppController:
         if self._task is not None and not self._task.done():
             raise HttpError(409, "a flight is already running")
         if self.cfg.atc.online_integration and not self.cfg.atc.online_network:
-            raise HttpError(409, "Choose Local ATC, VATSIM or IVAO on the ATC tab before starting the flight")
+            raise HttpError(409, "Choose Only LocalTC, VATSIM hybrid or IVAO hybrid on the ATC tab before starting the flight")
         self.online_view = {}
         if self.source_kind == "live" and next_shift(self.cfg.ui.last_flight_end, self.cfg.atc.shift, time.time()) != self.cfg.atc.shift:
             self.cfg.atc.shift += 1  # back after a break: other controllers on (saved with the flight count)

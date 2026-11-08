@@ -86,12 +86,13 @@
         <div class="online-row">
           <b>ATC for this flight</b>
           <div class="seg" role="group" aria-label="ATC for this flight">
-            <button class="btn small" data-online="local">Local ATC</button>
-            <button class="btn small" data-online="vatsim">VATSIM</button>
-            <button class="btn small" data-online="ivao">IVAO</button>
+            <button class="btn small" data-online="local">Only LocalTC</button>
+            <button class="btn small" data-online="vatsim">VATSIM hybrid (+ LocalTC)</button>
+            <button class="btn small" data-online="ivao">IVAO hybrid (+ LocalTC)</button>
           </div>
           <span class="small" id="online-note"></span>
         </div>
+        <div class="muted small online-rule" id="online-rule" hidden></div>
         <div class="online-list small" id="online-list"></div>
       </div>
       <div class="splitter" data-for="airport-box,status-box" title="Drag to resize; double-click for the usual size"></div>
