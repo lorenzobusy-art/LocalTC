@@ -66,6 +66,7 @@ from localtc.sim_api import (
 from localtc.sim_api.geo import haversine_nm
 
 SAFETY, ROUTINE, CHATTER = 3, 2, 1
+ONLINE_ALERT = re.compile(r"^(\S+) connection for this airspace: (\S+), set ([\d.]+) on COM1")  # atc_core's "online" alert
 VERBOSITY = {"quiet": SAFETY, "standard": ROUTINE, "chatty": CHATTER}
 JOINED_PHASES = ("DEPARTURE", "CRUISE", "ARRIVAL", "APPROACH", "LANDING", "TAXI_IN")  # LocalTC started in these: joined in flight
 GAP_S = 8.0  # between two of the copilot's own routine calls: a person, not a feed
@@ -328,12 +329,12 @@ class Monitor(WatchMixin):
             told = self._online_told_to
             if told is None or told[1] != to.station or t - told[0] > 15.0:
                 self._call("joined", ROUTINE, t, f"We should be with {to.station}, {speech.frequency_display(to.mhz)}.")
-        elif isinstance(ev, AtcAlert) and ev.kind == "online" and self.engine is not None \
-                and (c := getattr(self.engine, "online_best", None)) is not None:
-            # An online network's controller covers the airspace ([atc] online_network): said whatever the verbosity.
-            net = {"vatsim": "VATSIM", "ivao": "IVAO"}.get(getattr(self.engine.cfg, "online_network", ""), "Online")
-            self._call(f"online:{c.callsign}", SAFETY, t, f"{net} connection for this airspace, set "
-                                                         f"{speech.frequency_display(c.frequency_mhz)} on COM1.", again_s=600.0)
+        elif isinstance(ev, AtcAlert) and ev.kind == "online" and (heard := ONLINE_ALERT.search(ev.detail or "")):
+            # An online network's controller works the airspace (the ATC hands over to them, or the copilot says
+            # so first): the copilot is the one who says it's the network's, once a controller, whatever the verbosity.
+            net, callsign, mhz = heard.group(1), heard.group(2), float(heard.group(3))
+            self._call(f"online:{callsign}", SAFETY, t, f"{net} connection for this airspace, set "
+                                                       f"{speech.frequency_display(mhz)} on COM1.", again_s=600.0)
         elif isinstance(ev, AtcAlert) and ev.kind == "online_gap" and self.engine is not None and (
                 (local := getattr(self.engine, "online_gap", None)) is not None):
             # On the network's frequency, but nobody online works this phase: LocalTC's controller, and where.

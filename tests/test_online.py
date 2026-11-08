@@ -149,7 +149,7 @@ def test_the_copilot_says_the_frequency_and_keeps_off_their_radio():
     engine.cfg.online_network = "vatsim"
     engine.online_best = ctl("KSEA_DEL", 128.0)
     pm = crew(engine)
-    out = pm.observe(AtcAlert(t=1.0, kind="online", detail="VATSIM connection for this airspace"))
+    out = pm.observe(AtcAlert(t=1.0, kind="online", detail="VATSIM connection for this airspace: KSEA_DEL, set 128.000 on COM1"))
     out += [o for t in range(2, 12) for o in pm.observe(own(float(t)))]
     assert said(out) == ["VATSIM connection for this airspace, set 128.0 on COM1."]
 
@@ -436,7 +436,8 @@ def test_localtcs_controller_hands_the_flight_to_the_network_when_its_airspace_g
     outputs = engine.handle(msgspec.structs.replace(own, t=2))
     outputs += [o for s in range(3, 8) for o in engine.handle(msgspec.structs.replace(own, t=s))]
     (contact,) = transmissions(outputs)
-    assert "on VATSIM 128" in contact.text and contact.instruction_id == "common.contact"
+    assert "128" in contact.text and "VATSIM" not in contact.text  # the controller says where; the copilot whose
+    assert contact.instruction_id == "common.contact"
 
 
 def test_a_handoff_to_an_airspace_the_network_works_goes_to_their_frequency():
@@ -448,7 +449,8 @@ def test_a_handoff_to_an_airspace_the_network_works_goes_to_their_frequency():
     engine._schedule(5.0, "common.contact", {"station": centre.station, "frequency": centre.mhz},
                      engine.facilities[0], handoff_to=centre)
     item = engine._scheduled[-1]
-    assert item.slots == {"station": "Seattle Center on IVAO", "frequency": 124.2}
+    assert item.slots == {"station": "Seattle Center", "frequency": 124.2}  # where to go, no network named
+    assert [a.kind for a in engine._pending_alerts] == ["online"]  # the copilot says it's IVAO's
     assert item.handoff_to.mhz == 124.2
 
 
@@ -491,3 +493,18 @@ def test_the_store_keeps_the_pilots_from_the_same_download_and_finds_those_near(
     store = OnlineStore("vatsim", fetcher=lambda network: ([ctl("KPAE_TWR", 132.95)], [near, far]), background=False)
     controllers, _ = store.get()
     assert len(controllers) == 1 and [p["callsign"] for p in store.pilots_near(LAT, LON, 250)] == ["ASA1083"]
+
+
+def test_released_by_an_online_controller_they_arent_proposed_again_inside_their_airspace():
+    engine, own = parked_engine(online_network="vatsim")
+    ground = ctl("KPAE_GND", 121.8)
+    engine.handle(OnlineAtc(t=1, network="vatsim", controllers=(ground,)))
+    engine.handle(msgspec.structs.replace(own, t=2, com1_mhz=121.8))
+    assert engine.online_muted
+    back = engine.handle(msgspec.structs.replace(own, t=3, com1_mhz=122.8))  # "contact unicom 122.8"
+    assert alerts(back, "online_back") and alerts(back, "online") == [] and transmissions(back) == []
+    later = [o for s in range(4, 20) for o in engine.handle(msgspec.structs.replace(own, t=s, com1_mhz=122.8))]
+    assert alerts(later, "online") == [] and transmissions(later) == []  # not sent back to them, by anyone
+    gone = msgspec.structs.replace(own, t=30, lat=LAT + 1, com1_mhz=122.8)  # out of their airspace ...
+    engine.handle(gone)
+    assert "KPAE_GND" not in engine._online_released

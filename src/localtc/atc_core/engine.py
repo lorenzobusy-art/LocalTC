@@ -724,6 +724,9 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
         self.online_gap: Facility | None = None  # LocalTC's controller for what nobody online works now
         self.online_back_to: Facility | None = None  # ... and the one to go to, just off the network's frequency
         self._online_told: dict[str, float] = {}  # callsign: when the pilot was told to call them
+        # The online controllers that released the flight ("contact unicom"): not proposed again until it has left
+        # their airspace (their outline round the flight is a guess; their word that it's left is not).
+        self._online_released: set[str] = set()
 
     # --- public ---------------------------------------------------------------------------
 
@@ -1495,6 +1498,11 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
             logging.getLogger(__name__).info("ATC: with %s %s, LocalTC quiet", net, tuned.callsign)
         elif was is not None and tuned is None:
             out += self._online_back(own, was, net)
+        # Out of a releasing controller's airspace now: theirs to propose again if the flight comes back in.
+        self._online_released = {c for c in self._online_released
+                                 if any(o.callsign == c and online_atc.covers(o, own) for o in self.online)}
+        if best is not None and best.callsign in self._online_released:
+            self.online_best = best = None  # they let the flight go: LocalTC's (the copilot says which)
         served = tuned is not None and online_atc.works(tuned, needed, own)  # COM1 on someone doing this phase's job
         self.online_gap = None
         if tuned is not None:
@@ -1518,9 +1526,10 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
         contact Milano Radar 126.750, online on VATSIM" (the airspace by LocalTC's name for it). Only when the pilot
         is on one of LocalTC's controllers and nothing else is being said to them."""
         tuned = self.state.comms.tuned
-        if tuned is None or self.online_tuned is not None or online_atc.same_mhz(own.tx_mhz, to.frequency_mhz) or any(
-                item.handoff_to is not None for item in self._scheduled):
-            return
+        if tuned is None or not tuned.matches(own.tx_mhz) or self.online_tuned is not None \
+                or online_atc.same_mhz(own.tx_mhz, to.frequency_mhz) \
+                or any(item.handoff_to is not None for item in self._scheduled):
+            return  # (COM1 on unicom, just off the network: no LocalTC controller there to say anything)
         local = self._local_for(needed, own)
         self._schedule(own.t, "common.contact", {"station": local.station, "frequency": to.frequency_mhz}, tuned,
                        handoff_to=Facility(local.controller, local.station, to.frequency_mhz, local.airport))
@@ -1677,6 +1686,8 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
         self.online_back_to = self._after_online(left) or self._local_for(online_atc.need(st.phase or P.PARKED.value,
                                                                                            own), own)
         logging.getLogger(__name__).info("ATC: off %s %s, LocalTC back", net, left.callsign)
+        if not gone:
+            self._online_released.add(left.callsign)  # they sent the flight on: not proposed again inside their airspace
         why = why or (f"{left.callsign} has left {net}" if gone else f"off {left.callsign}")
         return [self._alert(t, "online_back", f"{why}: LocalTC ATC is back")]
 
@@ -6292,15 +6303,16 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
     ) -> None:
         if handoff_to is not None and self.cfg.online_network and "frequency" in slots \
                 and (online := self._online_for(handoff_to)) is not None:
-            # The next airspace is the network's: "contact Milano Radar on VATSIM 126.750".
-            net = online_atc.network_name(self.cfg.online_network)
+            # The next airspace is the network's: "contact Milano Radar 126.750", where they are. The controller says
+            # only where to go; the copilot says it's VATSIM's (an "online" alert, once a controller).
             handoff_to = Facility(handoff_to.controller, handoff_to.station, online.frequency_mhz, handoff_to.airport)
             slots = {**slots, "frequency": online.frequency_mhz}
-            if isinstance(slots.get("station"), str):
-                slots["station"] = f"{slots['station']} on {net}"
-            else:
-                said = Phrase(f"online on {net}", f"online on {net}")
-                note = note + said if note is not None else said
+            net = online_atc.network_name(self.cfg.online_network)
+            if self._online_tell(online.callsign, t):
+                self.online_best = online  # (the copilot names them)
+                self._pending_alerts.append(self._alert(t, "online", f"{net} connection for this airspace: "
+                                                        f"{online.callsign}, set "
+                                                        f"{online_atc.frequency_text(online.frequency_mhz)} on COM1"))
         due = t + (self._random().uniform(*self.cfg.response_delay_s) if delay else 0.0)
         if self._scheduled:
             # Replies decided together go out in the order they were decided: "equipment standing by" to the

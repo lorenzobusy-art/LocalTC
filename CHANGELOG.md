@@ -27,8 +27,9 @@ a new minor version adds features, a patch fixes them.
   you to them, and the flight plan waits. Off it (their "contact unicom" too), the copilot says once which LocalTC
   controller to call: the airspace after the one the network's controller worked, along the flight (released by an
   online FIR, the next FIR, never LocalTC's version of the one you left), and LocalTC carries on from there with the
-  plan. LocalTC's own controllers hand you over too: when the next airspace (or the one you're in) is online, it's
-  "contact Milano Radar on VATSIM 126.750", not only the copilot telling you.
+  plan. LocalTC's own controllers hand you over too, saying only where ("contact Milano Radar 126.750"); the copilot
+  is the one who says it's VATSIM's or IVAO's, once a controller. An online controller that released you isn't
+  proposed again until you've left their airspace.
 - **The flight's frequencies on the Live Map:** a table on the left with every airspace of the flight in the order it's
   flown (the departure's delivery, ground, tower and departure, each FIR along the route, the arrival, tower and ground),
   its frequency, and who works it: LocalTC's controller, or the online network's (marked where it's top-down, working a
