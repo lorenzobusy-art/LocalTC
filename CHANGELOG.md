@@ -92,6 +92,21 @@ a new minor version adds features, a patch fixes them.
   instead of ATC's "say again".
 
 ### Fixed
+- **The descent says where to stop, in Europe as Europe does:** "descend FL110, cleared TINI9W arrival" at the top of
+  descent (not "descend via" alone, the FAA's), "continue descent FL110" from the next centre, and the approach
+  clearance on a STAR with the altitude to join the final at ("descend 4,000 feet, cleared ILS runway 09R approach"),
+  never a clearance that leaves the flight at FL150. Where the arrival ends is its lowest published restriction from
+  the sim's navdata; a plan's predicted level at its last fix (FL250 thirty miles out) is no longer taken for it.
+- **Flight levels above each country's own transition altitude** (5,000 ft in France, 6,000 in Italy): the default
+  config forced the FAA's 18,000 everywhere, so Europe heard "descend 15,000 feet" for FL150.
+- **An arrival said again is an arrival:** "negative, I say again, via the TINI9W arrival", not "departure".
+- **A level reported to radar is answered:** "maintaining FL150" with 4,000 given gets the 4,000 said again; the level
+  given gets "roger". A thank-you still needs no answer.
+- **Two controllers on one frequency** (Malpensa's 120.9 is both its clearance and a tower): in the air the tower
+  answers, and after "contact Milan Radar Departure" an "airborne" on 120.9 is sent on again, not answered by the
+  clearance as "out of range".
+- **A direct only to a fix that exists:** "direct NOBKE" heard as "direct knob" is NOBKE, the route's fix it sounds
+  like, never a "Knob Itarrow" nobody can find; a name that's no fix of the flight is asked again.
 - **Waiting for the parking brake:** a jetway, stairs or push asked for before it's set comes once it is, the way you
   asked for it. The FSLabs' own brake is read, and where a brake can't be read at all, "it's set" is taken at your word.
 - **"Request jetway disconnection"** takes the jetway away instead of asking for it.
