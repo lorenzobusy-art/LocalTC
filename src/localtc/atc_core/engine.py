@@ -4336,7 +4336,8 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
     def _star_intercept_altitude(self, own: OwnshipState, plan: dict[str, Any]) -> int | None:
         """The altitude to join the final at from a STAR, said with the approach clearance: under the glideslope from
         where the arrival meets the final when that's known, else about 3,000 ft above the field (where ILS finals
-        are joined), never below where the approach starts or the sector's minimum, in whole thousands; None when
+        are joined), never below where the approach starts nor above what the STAR already cleared the flight to,
+        in whole thousands; None when
         the flight is already at or below it (nothing to descend to)."""
         geo = self.geometry(self.state.flight.destination)
         if geo is None:
@@ -4347,8 +4348,14 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
             wanted = elev + leg.join_nm * 0.9 * vectors.GLIDESLOPE_FT_PER_NM
         else:
             wanted = elev + STAR_INTERCEPT_AGL_FT
-        floor = max(plan["approach_alt"], plan.get("msa") or 0)
+        # On a published STAR its altitudes are clear of the terrain: the sector minimum (Linate's, raised by the
+        # Prealps) is for vectors off it, not for a flight the arrival takes down to 3,000.
+        floor = plan["approach_alt"]
         altitude = int(math.ceil(max(wanted, floor) / 1000.0) * 1000)
+        assigned = self.state.assignments.altitude_ft
+        if assigned and assigned < altitude:
+            # Cleared lower already (the STAR's 3,000): never back up to the glideslope's 8,000 from the join.
+            altitude = max(assigned, int(math.ceil(floor / 1000.0) * 1000))
         return altitude if own.alt_indicated_ft > altitude + 500 else None
 
     def _radar_vectors(self, own: OwnshipState) -> bool:
@@ -4378,8 +4385,13 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
             if joins and left_nm <= STAR_CLEAR_NM:
                 intercept = self._star_intercept_altitude(own, plan)
                 if self.region.icao and intercept is not None:
-                    self._schedule(t, "approach.cleared_star_descend", {"approach": plan["approach"], "altitude": intercept},
-                                   tuned, delay=False, clearance="approach",
+                    tower = self.facility("tower")
+                    slots = {"approach": plan["approach"], "altitude": intercept}
+                    if tower is not None:  # "... contact Linate Tower 118.1 when established"
+                        slots |= {"station": tower.station, "frequency": tower.mhz}
+                    self._schedule(t, "approach.cleared_star_descend_tower" if tower is not None
+                                   else "approach.cleared_star_descend", slots,
+                                   tuned, delay=False, clearance="approach", handoff_to=tower,
                                    on_issue=lambda: (self._assign(altitude_ft=intercept, approach=plan["approach"].display,
                                                                   arrival_runway=plan["approach"].landing_runway),
                                                      setattr(self, "_via_floor", None),

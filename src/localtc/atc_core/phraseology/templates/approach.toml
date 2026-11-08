@@ -203,6 +203,14 @@ text = ["{callsign}, descend {altitude}, cleared {approach} approach."]
 readback = { required = ["altitude", "approach"] }
 pilot_readback = "Descend {altitude}, cleared {approach} approach, {callsign_short}."
 
+# ... and the tower to call once on the localiser ("when established"), where the airport has one.
+[[template]]
+id = "approach.cleared_star_descend_tower"
+controller = "approach"
+text = ["{callsign}, descend {altitude}, cleared {approach} approach, contact {station} {frequency} when established."]
+readback = { required = ["altitude", "approach", "frequency"] }
+pilot_readback = "Descend {altitude}, cleared {approach} approach, {station} {frequency} when established, {callsign_short}."
+
 [[template]]
 id = "approach.checkin_descend_star"
 controller = "approach"

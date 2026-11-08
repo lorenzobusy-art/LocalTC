@@ -111,7 +111,9 @@ a new minor version adds features, a patch fixes them.
 - **The descent says where to stop, in Europe as Europe does:** "when ready descend FL110, cleared TINI9W arrival"
   ahead of the top of descent (so you start down at your own, the FMS's, not the plan's; without "when ready" only
   when you're already on the way down), "continue descent 3,000 feet" from the next centre or approach read back like any
-  altitude (no "roger" to the readback) (not "descend via" alone, the FAA's), "continue descent FL110" from the next centre, and the approach
+  altitude (no "roger" to the readback), and the approach clearance on a STAR never above what the STAR already gave
+  ("descend 3,000 feet, cleared ILS Y runway 35 approach, contact Linate Tower 118.1 when established"; the sector
+  minimum is for vectors, not a published arrival); in Europe the tower is called "when established" (not "descend via" alone, the FAA's), "continue descent FL110" from the next centre, and the approach
   clearance on a STAR with the altitude to join the final at ("descend 4,000 feet, cleared ILS runway 09R approach"),
   never a clearance that leaves the flight at FL150. Where the arrival ends is its lowest published restriction from
   the sim's navdata; a plan's predicted level at its last fix (FL250 thirty miles out) is no longer taken for it.

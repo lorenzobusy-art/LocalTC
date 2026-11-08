@@ -111,3 +111,11 @@ def test_the_descent_given_ahead_of_the_top_of_descent_is_when_ready():
     library = engine.libraries["icao"]
     assert "when ready" in library.get("center.descend_star_pd").text[0]
     assert library.get("center.descend_star_pd").readback.required == library.get("center.descend_star").readback.required
+
+
+def test_the_ils_clearance_in_europe_says_the_tower_to_call_when_established():
+    engine, own = parked_engine()
+    library = engine.libraries["icao"]
+    assert library.get("approach.cleared").text[0].endswith("when established.")
+    assert "when established" in library.get("approach.cleared_star_descend_tower").text[0]
+    assert "frequency" in library.get("approach.cleared_star_descend_tower").readback.required
