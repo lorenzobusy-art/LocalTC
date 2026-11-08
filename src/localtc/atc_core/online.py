@@ -11,15 +11,21 @@ ones LocalTC hands flights between and the Live Map draws), so the networks' sec
   one it sits in (LON_N_CTR is in EGTT);
 - an approach (APP, DEP) works its approach area: the one named for its airport (SEA_APP: Seattle's), else the one it
   sits in, below FL245;
-- delivery, ground and tower work a circle round their field (the network's range, held to what that kind of position
-  reaches), the way LocalTC's own do: delivery and ground for an aircraft on the ground, tower low near it.
+- delivery and ground work their own airport's ground; a tower its own airport and its zone round it (10 nm, below
+  3,000 ft above the field), never the next field's and never an approach's airspace.
 
-Where there's no outline for a centre or approach, the circle is used for them too.
+Where there's no outline for a centre or approach, a circle (the network's range) is used for them.
+
+The networks' rule is top-down: a controller works the positions below theirs that nobody is on, inside their own
+airspace, never one above. An approach with no tower or ground does all three at its airports; a tower with no ground
+does ground too; a centre with nobody below does everything in its FIR; a tower never works an approach. So each phase
+has the position it needs (``need``), and the flight is with the lowest one online from there up that works it here.
 """
 
 from collections.abc import Iterable
 from functools import lru_cache
 
+from localtc.airports.world import world
 from localtc.atc_core.airspace import Airspace, Area
 from localtc.sim_api import OnlineController, OwnshipState
 from localtc.sim_api.geo import haversine_nm as distance_nm
@@ -31,29 +37,22 @@ DEFAULT_RANGE_NM = {"DEL": 10.0, "GND": 10.0, "TWR": 30.0, "APP": 80.0, "CTR": 3
 MAX_RANGE_NM = {"DEL": 15.0, "GND": 15.0, "TWR": 40.0, "APP": 150.0, "CTR": 1000.0, "FSS": 1500.0, "ATIS": 100.0}
 # (An ATIS is never the one to call, but COM1 on it is listening to the network: LocalTC stays quiet.)
 AREA_KINDS = {"CTR": "center", "FSS": "center", "APP": "approach"}  # the positions that work an outline
-TOWER_AGL_FT = 5000.0  # a tower works the aircraft below this (above its field)
+PYRAMID = ("DEL", "GND", "TWR", "APP", "CTR", "FSS")  # bottom to top: each works the ones below it nobody's on
+AT_FIELD_NM = 5.0  # on the ground this close to a delivery, ground or tower controller's airport: at their airport
+TOWER_ZONE_NM = 10.0  # a tower's zone round its field ...
+TOWER_ZONE_AGL_FT = 3000.0  # ... below this above it
 APPROACH_MAX_FT = 24500.0  # an approach (or departure) controller below FL245
 TUNED_SLACK = 1.5  # COM1 on a controller's frequency counts as with them out to this times their range
 TUNED_AREA_NM = 30.0  # ... or this close outside their outline (just across the line, the handoff not made yet)
 SAME_MHZ = 0.004  # 121.800 and 121.805 are one frequency (8.33 kHz spacing)
 RELEVANT_NM = 400.0  # the controllers kept around the aircraft and its route's points (beyond their own range)
 
-# Who the flight should be with in each phase, first choice first (a missing position's airspace is its parent's:
-# no delivery, ground does it; no ground, tower ...).
-BY_PHASE = {
-    "PARKED": ("DEL", "GND", "TWR", "APP", "CTR", "FSS"),
-    "PUSHBACK": ("GND", "DEL", "TWR", "APP", "CTR", "FSS"),
-    "TAXI_OUT": ("GND", "TWR", "APP", "CTR", "FSS"),
-    "RUNWAY_HOLD": ("TWR", "GND", "APP", "CTR", "FSS"),
-    "TAKEOFF": ("TWR", "APP", "CTR", "FSS"),
-    "DEPARTURE": ("APP", "CTR", "TWR", "FSS"),
-    "CRUISE": ("CTR", "APP", "FSS"),
-    "ARRIVAL": ("APP", "CTR", "FSS"),
-    "APPROACH": ("APP", "TWR", "CTR", "FSS"),
-    "LANDING": ("TWR", "APP", "CTR", "FSS"),
-    "TAXI_IN": ("GND", "TWR", "APP", "CTR", "FSS"),
+# The position each phase needs: delivery parked, ground taxiing, tower on and over the runway (and low round the
+# field), approach on the way in and out, the centre en route.
+NEED_BY_PHASE = {
+    "PARKED": "DEL", "PUSHBACK": "GND", "TAXI_OUT": "GND", "RUNWAY_HOLD": "TWR", "TAKEOFF": "TWR",
+    "DEPARTURE": "APP", "CRUISE": "CTR", "ARRIVAL": "APP", "APPROACH": "APP", "LANDING": "TWR", "TAXI_IN": "GND",
 }
-GROUND_KINDS = ("DEL", "GND")
 
 
 def network_name(network: str) -> str:
@@ -104,24 +103,56 @@ def _inside(area: Area, own: OwnshipState) -> bool:
     return area.contains(own.lat, own.lon)
 
 
+def airport_of(c: OnlineController) -> tuple[float, float]:
+    """Where a delivery, ground or tower controller's airport is (LIRF_TWR: Fiumicino; SEA_GND: KSEA), else where they
+    are."""
+    return airport_field(c.callsign.upper().split("_", 1)[0]) or (c.lat, c.lon)
+
+
+@lru_cache(maxsize=4096)
+def airport_field(code: str) -> tuple[float, float] | None:
+    for icao in (code, f"K{code}") if len(code) == 3 else (code,):
+        found = next(((a.lat, a.lon) for a in world() if a.icao == icao), None)
+        if found is not None:
+            return found
+    return None
+
+
+def need(phase: str, own: OwnshipState) -> str:
+    """The position the flight needs now: its phase's, and the tower's low round a field on the way out or in."""
+    wanted = NEED_BY_PHASE.get(phase, "CTR")
+    if wanted == "APP" and not own.on_ground and own.alt_agl_ft < TOWER_ZONE_AGL_FT:
+        return "TWR"  # just off the runway, or on a short final: the tower's, where it has one (else up from there)
+    return wanted
+
+
 def covers(c: OnlineController, own: OwnshipState) -> bool:
-    """``c`` works the aircraft where it is: in their outline (or range), and the kind of position for its height."""
+    """``c``'s own airspace has the aircraft in it: their FIR, approach area, or airport and its zone."""
+    if c.kind == "ATIS":
+        return distance_nm(own.lat, own.lon, c.lat, c.lon) <= c.range_nm
+    if c.kind in ("DEL", "GND", "TWR"):
+        lat, lon = airport_of(c)
+        far = distance_nm(own.lat, own.lon, lat, lon)
+        if own.on_ground:
+            return far <= AT_FIELD_NM
+        return c.kind == "TWR" and far <= TOWER_ZONE_NM and own.alt_agl_ft < TOWER_ZONE_AGL_FT
     if c.kind == "APP" and own.alt_indicated_ft >= APPROACH_MAX_FT:
         return False
     area = area_of(c)
     if area is not None:
         return _inside(area, own)
-    if distance_nm(own.lat, own.lon, c.lat, c.lon) > c.range_nm:
-        return False
-    if c.kind in GROUND_KINDS:
-        return own.on_ground
-    if c.kind == "TWR":
-        return own.on_ground or own.alt_agl_ft < TOWER_AGL_FT
-    return True
+    return distance_nm(own.lat, own.lon, c.lat, c.lon) <= c.range_nm
+
+
+def works(c: OnlineController, needed: str, own: OwnshipState) -> bool:
+    """``c`` does the ``needed`` position's job here: theirs or one below it nobody's on (top-down), in their airspace."""
+    if c.kind not in PYRAMID or needed not in PYRAMID or PYRAMID.index(c.kind) < PYRAMID.index(needed):
+        return False  # never a position above their own: a tower doesn't work an approach
+    return covers(c, own)
 
 
 def covering(controllers: Iterable[OnlineController], own: OwnshipState) -> list[OnlineController]:
-    return [c for c in controllers if covers(c, own)]
+    return [c for c in controllers if c.kind != "ATIS" and covers(c, own)]
 
 
 def _specific(c: OnlineController) -> float:
@@ -132,14 +163,14 @@ def _specific(c: OnlineController) -> float:
 
 
 def best(controllers: Iterable[OnlineController], own: OwnshipState, phase: str) -> OnlineController | None:
-    """The controller the flight should be with now: of those covering it, the first kind its phase calls for, the
-    most specific of that kind, then the nearest (an airport's own tower, not the next field's)."""
-    order = BY_PHASE.get(phase, BY_PHASE["CRUISE"])
-    here = [c for c in covering(controllers, own) if c.kind in order]
+    """The controller the flight should be with now: the lowest position online, from the one its phase needs up,
+    that works it where it is (the most specific of that kind, then the nearest); None: nobody online does."""
+    needed = need(phase, own)
+    here = [c for c in controllers if works(c, needed, own)]
     if not here:
         return None
-    return min(here, key=lambda c: (order.index(c.kind), _specific(c), distance_nm(own.lat, own.lon, c.lat, c.lon),
-                                    c.callsign))
+    return min(here, key=lambda c: (PYRAMID.index(c.kind), _specific(c),
+                                    distance_nm(own.lat, own.lon, *airport_of(c)), c.callsign))
 
 
 def _reaches(c: OnlineController, own: OwnshipState) -> bool:

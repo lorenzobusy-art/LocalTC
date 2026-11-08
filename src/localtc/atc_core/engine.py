@@ -713,6 +713,7 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
         self.online: tuple[OnlineController, ...] = ()
         self.online_best: OnlineController | None = None
         self.online_tuned: OnlineController | None = None
+        self.online_gap: Facility | None = None  # LocalTC's controller for what nobody online works now
         self._online_told: dict[str, float] = {}  # callsign: when the pilot was told to call them
 
     # --- public ---------------------------------------------------------------------------
@@ -1468,24 +1469,54 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
         return "parking" if spots else None
 
     def _online_update(self, own: OwnshipState) -> list[BusEvent]:
-        """The online network beside LocalTC: the pilot told when a controller of theirs covers the airspace (and the
-        flight isn't with one already), LocalTC quiet while COM1 is on one, and back when it isn't."""
+        """The online network beside LocalTC: the pilot told when one of its controllers works the airspace and phase
+        (top-down: ``atc_core.online``) and COM1 isn't on someone who does, told when nobody online does any more
+        (LocalTC's controller then, and its frequency), LocalTC quiet while COM1 is on one of theirs, back when not."""
         out: list[BusEvent] = []
         net = online_atc.network_name(self.cfg.online_network)
         was = self.online_tuned
-        self.online_tuned = online_atc.tuned_to(self.online, own)
-        self.online_best = best = online_atc.best(self.online, own, self.state.phase or P.PARKED.value)
-        if was is None and self.online_tuned is not None:
+        self.online_tuned = tuned = online_atc.tuned_to(self.online, own)
+        phase = self.state.phase or P.PARKED.value
+        self.online_best = best = online_atc.best(self.online, own, phase)
+        needed = online_atc.need(phase, own)
+        if was is None and tuned is not None:
             self._online_quiet()
-            logging.getLogger(__name__).info("ATC: with %s %s, LocalTC quiet", net, self.online_tuned.callsign)
-        elif was is not None and self.online_tuned is None:
+            logging.getLogger(__name__).info("ATC: with %s %s, LocalTC quiet", net, tuned.callsign)
+        elif was is not None and tuned is None:
             out += self._online_back(own, was, net)
-        if best is not None and self.online_tuned is None and not online_atc.same_mhz(own.tx_mhz, best.frequency_mhz) \
-                and own.t - self._online_told.get(best.callsign, -ONLINE_TELL_AGAIN_S) >= ONLINE_TELL_AGAIN_S:
-            self._online_told[best.callsign] = own.t
-            out.append(self._alert(own.t, "online", f"{net} connection for this airspace: {best.callsign}, set "
-                                                    f"{online_atc.frequency_text(best.frequency_mhz)} on COM1"))
+        served = tuned is not None and online_atc.works(tuned, needed, own)  # COM1 on someone doing this phase's job
+        self.online_gap = None
+        if best is not None and not served and not online_atc.same_mhz(own.tx_mhz, best.frequency_mhz):
+            if self._online_tell(f"{best.callsign}", own.t):
+                out.append(self._alert(own.t, "online", f"{net} connection for this airspace: {best.callsign}, set "
+                                                        f"{online_atc.frequency_text(best.frequency_mhz)} on COM1"))
+        elif best is None and tuned is not None and not served:
+            # On a network frequency whose controller doesn't work this (ground, with the flight at the runway and no
+            # tower, approach or centre online): LocalTC's controller for it, and where.
+            self.online_gap = local = self._local_for(needed, own)
+            if self._online_tell(f"gap:{needed}:{tuned.callsign}", own.t):
+                out.append(self._alert(own.t, "online_gap", f"No {net} controller for this from {tuned.callsign}: "
+                                                            f"LocalTC's {local.station}, set {local.mhz:.3f} on COM1"))
         return out
+
+    def _online_tell(self, key: str, t: float) -> bool:
+        """Once, and again after ``ONLINE_TELL_AGAIN_S`` if nothing came of it."""
+        if t - self._online_told.get(key, -ONLINE_TELL_AGAIN_S) < ONLINE_TELL_AGAIN_S:
+            return False
+        self._online_told[key] = t
+        return True
+
+    def _local_for(self, needed: str, own: OwnshipState) -> Facility:
+        """LocalTC's controller for a position the network has nobody on (DEL, GND, TWR, APP, CTR): the working
+        airport's (the next one up it has, as the networks do), else the centre."""
+        airport = self._working_airport()
+        ladder = {"DEL": ("clearance", "ground", "tower"), "GND": ("ground", "tower"), "TWR": ("tower",),
+                  "APP": ("approach", "departure") if self._arriving else ("departure", "approach")}.get(needed, ())
+        for controller in ladder:
+            found = next((f for f in self.facilities if f.controller == controller and f.airport == airport), None)
+            if found is not None:
+                return found
+        return self._sector_candidate(own) or self._center()
 
     def _online_quiet(self) -> None:
         """With the online controller now: whatever LocalTC had to say, or waited for, is theirs."""

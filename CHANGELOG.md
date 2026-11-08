@@ -11,8 +11,13 @@ a new minor version adds features, a patch fixes them.
   whether it's flown with Local ATC, VATSIM or IVAO (Start waits for the choice). With a network, its controllers around
   the route are looked up each minute from its public data feed. Their sectors are LocalTC's own: a centre works its FIR
   and an approach its approach area, the same outlines LocalTC hands flights between and the Live Map draws; delivery,
-  ground and tower work the field. When one covers your airspace for the phase you're in (the next one up where a
-  position isn't staffed), the copilot says "VATSIM connection for this airspace, set 121.800 on COM1". While COM1 is on
+  ground and tower their own airport (a tower its zone too, never the next field's). The networks' top-down rule is
+  kept: a controller works the positions below theirs that nobody's on, in their own airspace, never one above (an
+  approach with no tower or ground does all three, a tower with no ground does ground, a centre with nobody below does
+  everything, a tower never works an approach). When one works your airspace for the phase you're in, the copilot says
+  "VATSIM connection for this airspace, set 121.800 on COM1"; when the one you're on can't work the next phase and
+  nobody online can (their ground, at the runway, with no tower, approach or centre), it gives you LocalTC's controller
+  and frequency for it. While COM1 is on
   their frequency (or the network's ATIS), LocalTC's controllers and its other traffic stay quiet, nothing is said on
   the radio for you, and your push-to-talk isn't recorded or transcribed: you're talking to a person through the
   network's own client. The copilot carries on with its callouts, checklists and warnings on the intercom; a call it

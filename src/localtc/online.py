@@ -14,7 +14,7 @@ import time
 from collections.abc import Callable
 from typing import Any
 
-from localtc.atc_core.online import kind_of, range_of
+from localtc.atc_core.online import airport_field, kind_of, range_of
 from localtc.ops.fetch import http_json
 from localtc.sim_api import OnlineController
 
@@ -31,13 +31,8 @@ AIRPORT_KINDS = ("DEL", "GND", "TWR", "APP", "ATIS")  # positions at an airport:
 
 
 def _airport_spot(callsign: str) -> tuple[float, float] | None:
-    """Where an airport position is when the feed doesn't say: its airport (LIRF_TWR at Fiumicino)."""
-    from localtc.airports.world import world
-
-    code = callsign.upper().split("_", 1)[0]
-    if len(code) == 3:
-        code = f"K{code}"  # VATSIM's US positions go by the FAA code: SEA_TWR is KSEA
-    return next(((a.lat, a.lon) for a in world() if a.icao == code), None)
+    """Where an airport position is when the feed doesn't say: its airport (LIRF_TWR at Fiumicino; SEA_GND at KSEA)."""
+    return airport_field(callsign.upper().split("_", 1)[0])
 
 
 def parse_vatsim(data: dict, transceivers: list | None) -> list[OnlineController]:

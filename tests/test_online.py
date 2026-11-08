@@ -233,3 +233,49 @@ def test_the_copilot_keeps_to_the_intercom_on_the_networks_frequency():
     assert said(out) == ['We\'re on IVAO, that call\'s yours: "Seattle Center, request flight level 380".']
     assert not [o for o in out if isinstance(o, Transcript)] and pm._radio_queue == []
     assert said(pm._one_call(3.0, "ground")) == ["We're on IVAO, you'll have to call them yourself."]
+
+
+# --- the networks' top-down rule: a controller works the positions below theirs nobody's on, in their own airspace --
+
+
+def test_an_approach_with_no_tower_or_ground_works_all_three_at_its_airports():
+    engine, own = parked_engine()  # parked at Paine, which Seattle Approach's area takes in
+    approach, tower = ctl("SEA_APP", 119.2, lat=47.45, lon=-122.31), ctl("KPAE_TWR", 132.95)
+    assert online_atc.best([approach], own, "PARKED") is approach  # delivery's job
+    assert online_atc.best([approach], own, "TAXI_OUT") is approach  # ground's
+    assert online_atc.best([approach, tower], own, "TAXI_OUT") is tower  # a tower with no ground does ground
+    assert online_atc.best([approach, tower], own, "RUNWAY_HOLD") is tower
+
+
+def test_a_tower_works_only_its_own_field_and_zone_never_an_approach():
+    engine, own = parked_engine()
+    boeing_tower = ctl("KBFI_TWR", 120.6, lat=47.53, lon=-122.30)  # Boeing Field's tower, 20 nm off
+    assert online_atc.best([boeing_tower], own, "TAXI_OUT") is None
+    tower = ctl("KPAE_TWR", 132.95)
+    climbing = msgspec.structs.replace(own, on_ground=False, alt_agl_ft=6000, alt_indicated_ft=6600, lat=LAT + 0.05)
+    assert online_atc.best([tower], climbing, "DEPARTURE") is None  # the approach's airspace: not the tower's
+    just_off = msgspec.structs.replace(climbing, alt_agl_ft=1200, alt_indicated_ft=1800)
+    assert online_atc.best([tower], just_off, "DEPARTURE") is tower  # still in its zone
+    centre = ctl("ZSE_CTR", 124.2, lat=44.0, lon=-121.0, kind="CTR")
+    assert online_atc.best([tower, centre], climbing, "DEPARTURE") is centre
+
+
+def test_a_centre_with_nobody_below_does_everything_and_a_ground_never_works_the_runway():
+    engine, own = parked_engine()
+    centre, ground = ctl("ZSE_CTR", 124.2, lat=44.0, lon=-121.0, kind="CTR"), ctl("KPAE_GND", 121.8)
+    for phase in ("PARKED", "TAXI_OUT", "RUNWAY_HOLD", "TAKEOFF"):
+        assert online_atc.best([centre], own, phase) is centre
+    assert online_atc.best([ground], own, "RUNWAY_HOLD") is None
+    assert online_atc.best([ground, centre], own, "RUNWAY_HOLD") is centre
+
+
+def test_on_their_ground_with_nobody_online_for_the_runway_the_pilot_is_sent_to_localtcs_tower():
+    engine, own = parked_engine(online_network="vatsim")
+    engine.handle(OnlineAtc(t=1, network="vatsim", controllers=(ctl("KPAE_GND", 121.8),)))
+    engine.handle(msgspec.structs.replace(own, t=2, com1_mhz=121.8))
+    assert engine.online_muted
+    engine.state.phase = "RUNWAY_HOLD"
+    (gap,) = alerts(engine.handle(msgspec.structs.replace(own, t=3, com1_mhz=121.8)), "online_gap")
+    local = engine.online_gap
+    assert local.controller == "tower" and local.airport == "KPAE"
+    assert gap.detail == f"No VATSIM controller for this from KPAE_GND: LocalTC's {local.station}, set {local.mhz:.3f} on COM1"

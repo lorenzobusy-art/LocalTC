@@ -52,6 +52,7 @@ ALERTS = {
     "llm_rejected": "The language model's answer was turned away",
     "online": "Online ATC",
     "online_back": "Online ATC",
+    "online_gap": "Online ATC",
 }
 
 

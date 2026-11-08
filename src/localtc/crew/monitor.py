@@ -331,6 +331,11 @@ class Monitor(WatchMixin):
             net = {"vatsim": "VATSIM", "ivao": "IVAO"}.get(getattr(self.engine.cfg, "online_network", ""), "Online")
             self._call(f"online:{c.callsign}", SAFETY, t, f"{net} connection for this airspace, set "
                                                          f"{speech.frequency_display(c.frequency_mhz)} on COM1.", again_s=600.0)
+        elif isinstance(ev, AtcAlert) and ev.kind == "online_gap" and self.engine is not None and (
+                (local := getattr(self.engine, "online_gap", None)) is not None):
+            # On the network's frequency, but nobody online works this phase: LocalTC's controller, and where.
+            self._call(f"online_gap:{local.station}", SAFETY, t, f"Nobody online for this, it's LocalTC's {local.station}, "
+                                                                 f"{speech.frequency_display(local.mhz)}.", again_s=600.0)
         elif isinstance(ev, AtcAlert) and ev.kind == "online_back":
             self._call("online_back", SAFETY, t, "No online controller with us now, LocalTC ATC is back.", again_s=60.0)
         elif isinstance(ev, AtcAlert) and ev.kind == "emergency":
