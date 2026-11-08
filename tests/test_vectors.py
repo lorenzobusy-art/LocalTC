@@ -228,3 +228,4 @@ def test_a_base_more_than_square_to_the_final_still_gets_the_turn_in(visual):
                             visual=visual, speed_kt=250)
     assert across.leg == "intercept"  # back to the final from the side it's on, never a base turned round
     assert abs(((across.heading_true - (end.heading_true + 30)) + 540) % 360 - 180) < 1
+

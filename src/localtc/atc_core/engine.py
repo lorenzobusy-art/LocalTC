@@ -680,6 +680,9 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
         self._radar_seen: dict[str, Facility] = {}
         self._expected_runway: str | None = None  # the runway the IFR clearance said to expect
         self._real_wait: dict[str, float] = {}  # when an airport's ATIS was first wanted, waiting for the real one
+        # The real METARs and ATIS are being fetched (``app``, live): only then worth waiting for (offline, or in a
+        # replay, nothing is coming, and the sim's is used straight away).
+        self.real_weather_coming = False
         self._joining: P | None = None  # started with the flight already under way: its controller still to work out
         self.joined_to: Facility | None = None  # ... and the controller it's with, once worked out (the copilot calls it)  # every radar controller the flight has had, by station
         self._approach_routes: dict[str, tuple] = {}  # each airport's approaches with their transitions (ApproachesData)
@@ -1224,7 +1227,8 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
             report = self._reports.get(icao)
             return self.weather.surface(icao, airports, report_first=True), None, \
                 ("METAR", None, (report.observed if report else "").rstrip("Z"))
-        if mode in ("real", "hybrid") and own.t - self._real_wait.setdefault(icao, own.t) < REAL_ATIS_WAIT_S:
+        if mode in ("real", "hybrid") and self.real_weather_coming \
+                and own.t - self._real_wait.setdefault(icao, own.t) < REAL_ATIS_WAIT_S:
             # The real ATIS or METAR on its way: nothing yet, rather than the sim's ATIS a minute before the real one
             # replaced it with another letter ("stop having the ATIS be from the sim before it grabs the real ATIS").
             return None

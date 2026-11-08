@@ -116,7 +116,10 @@ function setState(st) {
 
 function pttName(p) {
   if (!p) return "Right Ctrl";
-  if (p.mode === "joystick") return p.joystick;
+  if (p.mode === "joystick") {
+    const m = /^joystick:(\d+):button:(\d+)$/.exec(p.joystick || "");
+    return m ? `button ${m[2]} on controller ${m[1]}` : p.joystick;  // (not "joystick:0:button:0")
+  }
   if (p.mode === "enter") return "the headset button";
   return keyLabel(p.key);
 }
@@ -592,7 +595,22 @@ $("#btn-settings").onclick = () => {
 $("#dlg-settings-close").onclick = () => $("#dlg-settings").close();
 $("#dlg-settings").addEventListener("click", (e) => { if (e.target === $("#dlg-settings")) $("#dlg-settings").close(); });
 $("#btn-alerts").onclick = () => $("#dlg-alerts").showModal();
-$("#btn-help").onclick = () => $("#dlg-help").showModal();
+// Getting Started: a section at a time, the last one read opened again next time.
+function guideShow(name) {
+  if (!$(`.guide-sec[data-guide="${name}"]`)) name = "start";
+  document.querySelectorAll("#guide-nav button").forEach((b) => b.classList.toggle("active", b.dataset.guide === name));
+  document.querySelectorAll(".guide-sec").forEach((s) => s.classList.toggle("active", s.dataset.guide === name));
+  $("#guide-body").scrollTop = 0;
+  try { localStorage.setItem("guide", name); } catch (e) { /* not kept */ }
+}
+$("#guide-nav").addEventListener("click", (e) => { const b = e.target.closest("button[data-guide]"); if (b) guideShow(b.dataset.guide); });
+$("#btn-help").onclick = () => {
+  let last = "start";
+  try { last = localStorage.getItem("guide") || "start"; } catch (e) { /* the first section */ }
+  guideShow(last);
+  $("#dlg-help").showModal();
+};
+$("#dlg-help").addEventListener("click", (e) => { if (e.target === $("#dlg-help")) $("#dlg-help").close(); });
 // The welcome notes: shown once ever (existing installs included), seen for good once closed. This version's notes
 // count as seen with it: a new install has nothing to catch up on.
 $("#dlg-welcome")?.addEventListener("close", () => {
@@ -2100,7 +2118,7 @@ const Settings = {
         <label class="check-row"><input type="checkbox" id="s-cabin-interphone" ${st.cabin.interphone ? "checked" : ""}> Calls to the flight deck: boarding complete, cabin secure for takeoff and landing</label>
         <label class="check-row"><input type="checkbox" id="s-cabin-chime" ${st.cabin.chime ? "checked" : ""}> Cabin chime: before an announcement, and when the seatbelt sign changes</label>
         <label class="check-row"><input type="checkbox" id="s-cabin-music" ${st.cabin.boarding_music ? "checked" : ""}> Boarding music: quietly in the cabin while people get on and off</label>
-        <span class="hint" translate="no">"Airport Lounge" Kevin MacLeod (incompetech.com), licensed under Creative Commons: By Attribution 3.0. Chime: "Airplane Chime Sound Effect" by Sharelk (CC0).</span>
+        <span class="hint" translate="no">Music: "Airport Lounge", "Lobby Time", "Local Forecast - Elevator", "Bossa Antigua", "Smooth Lovin", "Easy Lemon", Kevin MacLeod (incompetech.com), licensed under Creative Commons: By Attribution 3.0. Chime: "Airplane Chime Sound Effect" by Sharelk (CC0).</span>
         <label class="check-row"><input type="checkbox" id="s-cabin-log" ${st.cabin.show_log !== false ? "checked" : ""}> Show their words in the radio log</label>
         <label class="check-row"><input type="checkbox" id="s-cabin-english" ${st.cabin.english_too ? "checked" : ""}> Announcements in English too: a crew whose language isn't English repeats each one in English</label>
         </div>

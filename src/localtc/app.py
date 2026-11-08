@@ -633,6 +633,7 @@ async def run_session(
                 if cfg.atc.atis_source in ("real", "hybrid"):
                     atc_service.weather_source = MetarStore().get
                     atc_service.atis_source = AtisStore().get
+                    engine.real_weather_coming = True
             if session.source_kind == "live" and engine.cfg.online_network:
                 from localtc.online import OnlineStore
 
