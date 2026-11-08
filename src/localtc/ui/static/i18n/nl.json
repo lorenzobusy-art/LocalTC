@@ -1413,5 +1413,14 @@
 "With {0}: LocalTC's ATC is quiet.": "Met {0}: de ATC van LocalTC zwijgt.",
 "{0} from the next flight.": "{0} vanaf de volgende vlucht.",
 "{0} not reached: {1}": "{0} niet bereikt: {1}",
-"{0}: its controllers are looked up once the flight starts.": "{0}: de verkeersleiders worden opgezocht zodra de vlucht start."
+"{0}: its controllers are looked up once the flight starts.": "{0}: de verkeersleiders worden opgezocht zodra de vlucht start.",
+"Airspace": "Luchtruim",
+"Departure": "Vertrek",
+"En route": "Onderweg",
+"Flight frequencies": "Frequenties van de vlucht",
+"Frequency": "Frequentie",
+"Online controller": "Online verkeersleider",
+"Show or hide the flight's frequencies": "Frequenties van de vlucht tonen of verbergen",
+"Top-down: works this position too, nobody's on it": "Top-down: doet ook deze positie, niemand zit erop",
+"Who works it": "Wie het doet"
 }

@@ -23,6 +23,11 @@ a new minor version adds features, a patch fixes them.
   network's own client. The copilot carries on with its callouts, checklists and warnings on the intercom; a call it
   would have made on the radio it hands to you. Off their frequency, or once they log off, LocalTC's ATC takes the
   flight on from where it is. The ATC tab lists who's online on the route, who covers you and who you're on.
+- **The flight's frequencies on the Live Map:** a table on the left with every airspace of the flight in the order it's
+  flown (the departure's delivery, ground, tower and departure, each FIR along the route, the arrival, tower and ground),
+  its frequency, and who works it: LocalTC's controller, or the online network's (marked where it's top-down, working a
+  position below its own that nobody's on). It's worked out by the ATC with the rule it flies by, and the row COM1 is on
+  is lit.
 - **Ground crew:** the turnaround and the push by voice, with no menus. Call them on the ramp frequency, 119.990 at every
   airport (RAMP in the frequency list, or "tune ramp" to the copilot), or on the intercom starting with "ramp". Off by
   default, in Settings → Ground crew.

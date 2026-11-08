@@ -279,3 +279,33 @@ def test_on_their_ground_with_nobody_online_for_the_runway_the_pilot_is_sent_to_
     local = engine.online_gap
     assert local.controller == "tower" and local.airport == "KPAE"
     assert gap.detail == f"No VATSIM controller for this from KPAE_GND: LocalTC's {local.station}, set {local.mhz:.3f} on COM1"
+
+
+def test_the_flights_frequency_table_says_who_works_each_airspace_top_down():
+    from helpers.airports import kbfi
+
+    from localtc.sim_api import AirportData
+
+    engine, own = parked_engine(destination="KBFI", cruise_ft=12000, online_network="vatsim")
+    engine.handle(AirportData(t=0, airport=kbfi()))
+
+    def table():
+        return [(r["space"], r["who"], r["station"], r["mhz"], r["top_down"]) for r in engine.frequency_plan()]
+
+    local = table()  # nobody online: every airspace LocalTC's, in the order it's flown
+    assert [space for space, *_ in local] == ["KPAE Delivery", "KPAE Ground", "KPAE Tower", "KPAE Departure",
+                                              "Seattle Center (KZSE)", "KBFI Arrival", "KBFI Tower", "KBFI Ground"]
+    assert {who for _, who, *_ in local} == {"LocalTC"}
+
+    # Seattle Approach online, Paine's tower too: Paine's ground and delivery are the tower's (top-down), Boeing's
+    # tower and ground the approach's; the centre stays LocalTC's.
+    engine.handle(OnlineAtc(t=1, network="vatsim", controllers=(ctl("SEA_APP", 119.2, lat=47.45, lon=-122.31),
+                                                                 ctl("KPAE_TWR", 132.95))))
+    rows = {space: (who, station, top_down) for space, who, station, _, top_down in table()}
+    assert rows["KPAE Delivery"] == ("VATSIM", "KPAE_TWR", True)
+    assert rows["KPAE Tower"] == ("VATSIM", "KPAE_TWR", False)
+    assert rows["KPAE Departure"] == ("VATSIM", "SEA_APP", False)
+    assert rows["KBFI Ground"] == ("VATSIM", "SEA_APP", True)
+    assert rows["Seattle Center (KZSE)"][0] == "LocalTC"
+    # ... and the ATC flies by the same rule: parked at Paine, it's the tower the pilot is sent to.
+    assert online_atc.best(engine.online, own, "PARKED").callsign == "KPAE_TWR"

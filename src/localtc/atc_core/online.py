@@ -162,15 +162,35 @@ def _specific(c: OnlineController) -> float:
     return area.size if area is not None else float("inf")
 
 
-def best(controllers: Iterable[OnlineController], own: OwnshipState, phase: str) -> OnlineController | None:
-    """The controller the flight should be with now: the lowest position online, from the one its phase needs up,
-    that works it where it is (the most specific of that kind, then the nearest); None: nobody online does."""
-    needed = need(phase, own)
+def pick(controllers: Iterable[OnlineController], own: OwnshipState, needed: str) -> OnlineController | None:
+    """Who online works the ``needed`` position where ``own`` is: the lowest position from it up that works it there
+    (the most specific of that kind, then the nearest); None: nobody online does (LocalTC's, then)."""
     here = [c for c in controllers if works(c, needed, own)]
     if not here:
         return None
     return min(here, key=lambda c: (PYRAMID.index(c.kind), _specific(c),
                                     distance_nm(own.lat, own.lon, *airport_of(c)), c.callsign))
+
+
+def best(controllers: Iterable[OnlineController], own: OwnshipState, phase: str) -> OnlineController | None:
+    """The controller the flight should be with now: who online works the position its phase needs."""
+    return pick(controllers, own, need(phase, own))
+
+
+def point(lat: float, lon: float, *, ground: bool, alt_ft: float, agl_ft: float) -> OwnshipState:
+    """An aircraft at a place of the flight (the frequency plan asks who works it there, as the flight will)."""
+    return OwnshipState(t=0.0, lat=lat, lon=lon, alt_msl_ft=alt_ft, alt_indicated_ft=alt_ft, alt_agl_ft=agl_ft,
+                        altimeter_inhg=29.92, hdg_mag=0.0, hdg_true=0.0, ias_kt=0.0, gs_kt=0.0, vs_fpm=0.0,
+                        on_ground=ground, squawk="", xpdr_mode="alt", com1_mhz=0.0, com2_mhz=0.0)
+
+
+def along(points: list[tuple[float, float]], step_nm: float = 30.0) -> list[tuple[float, float]]:
+    """The path through ``points`` with a point at least every ``step_nm`` (straight lines: enough to tell the FIRs)."""
+    out: list[tuple[float, float]] = []
+    for (lat1, lon1), (lat2, lon2) in zip(points, points[1:]):
+        legs = max(1, int(distance_nm(lat1, lon1, lat2, lon2) // step_nm))
+        out += [(lat1 + (lat2 - lat1) * i / legs, lon1 + (lon2 - lon1) * i / legs) for i in range(legs)]
+    return out + points[-1:]
 
 
 def _reaches(c: OnlineController, own: OwnshipState) -> bool:

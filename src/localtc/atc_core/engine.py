@@ -1518,6 +1518,67 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
                 return found
         return self._sector_candidate(own) or self._center()
 
+    def frequency_plan(self) -> list[dict[str, Any]]:
+        """The flight's airspaces in order, each with its frequency and who works it: the departure's delivery, ground,
+        tower and departure, the FIRs along the route, the destination's arrival, tower and ground. With an online
+        network, a position its controllers work (their own, or top-down one below theirs nobody's on) is theirs,
+        worked out as the flight will be (``online_atc.pick``); the rest is LocalTC's."""
+        st = self.state
+        network = self.cfg.online_network
+        online = self.online if network else ()
+        net = online_atc.network_name(network) if network else ""
+        rows: list[dict[str, Any]] = []
+        taken = tuple(f.mhz for f in self.facilities if f.controller != "center")
+
+        def local_at(geo, *controllers: str) -> Facility | None:
+            for controller in controllers:
+                found = next((f for f in self.facilities if f.controller == controller and f.airport == geo.icao), None)
+                if found is not None:
+                    return found
+            return None
+
+        def row(space: str, part: str, needed: str, local: Facility | None, where: OwnshipState) -> None:
+            c = online_atc.pick(online, where, needed) if online else None
+            if c is not None:
+                rows.append({"space": space, "part": part, "position": needed, "mhz": c.frequency_mhz, "who": net,
+                             "station": c.callsign, "online": True, "top_down": c.kind != needed})
+            elif local is not None:
+                rows.append({"space": space, "part": part, "position": needed, "mhz": local.mhz, "who": "LocalTC",
+                             "station": local.station, "online": False, "top_down": False})
+
+        def airport_rows(geo, part: str, arriving: bool) -> None:
+            a = geo.airport
+            ground = online_atc.point(a.lat, a.lon, ground=True, alt_ft=a.elev_ft, agl_ft=0.0)
+            up = online_atc.point(a.lat, a.lon, ground=False, alt_ft=a.elev_ft + 6000, agl_ft=6000.0)
+            terminal = ("approach", "departure") if arriving else ("departure", "approach")
+            ordered = [("Delivery", "DEL", ("clearance", "ground", "tower"), ground),
+                       ("Ground", "GND", ("ground", "tower"), ground), ("Tower", "TWR", ("tower",), ground),
+                       ("Arrival" if arriving else "Departure", "APP", terminal, up)]
+            if arriving:
+                ordered = [ordered[3], ordered[2], ordered[1]]  # the way in: approach, tower, ground
+            for name, needed, controllers, where in ordered:
+                row(f"{geo.icao} {name}", part, needed, local_at(geo, *controllers), where)
+
+        origin, dest = self.geometry(st.flight.origin), self.geometry(st.flight.destination)
+        if origin is not None:
+            airport_rows(origin, "departure", False)
+        ends = [(g.airport.lat, g.airport.lon) for g in (origin, dest) if g is not None]
+        path = ends[:1] + [(f.lat, f.lon) for f in self.cfg.route] + ends[1:]
+        cruise = float(st.assignments.cruise_ft or st.flight.cruise_ft or 30000)
+        seen: list[str] = []
+        for lat, lon in online_atc.along(path) if len(path) >= 2 else path:
+            area = self.airspace.center_at(lat, lon)
+            if area is None or (seen and seen[-1] == area.id):
+                continue
+            seen.append(area.id)
+            nearby = [g.airport for g in self.tracker.context_builder.airports.values()
+                      if g.distance_nm(lat, lon) < SECTOR_NEAREST_NM]
+            row(f"{area.name} ({area.id})", "enroute", "CTR", area_center(area.name, nearby, None, taken),
+                online_atc.point(lat, lon, ground=False, alt_ft=cruise, agl_ft=cruise))
+        if dest is not None:
+            airport_rows(dest, "arrival", True)
+        return rows
+
     def _online_quiet(self) -> None:
         """With the online controller now: whatever LocalTC had to say, or waited for, is theirs."""
         self._scheduled = []

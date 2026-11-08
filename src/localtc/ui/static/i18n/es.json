@@ -1413,5 +1413,14 @@
 "With {0}: LocalTC's ATC is quiet.": "Con {0}: el ATC de LocalTC está en silencio.",
 "{0} from the next flight.": "{0} desde el próximo vuelo.",
 "{0} not reached: {1}": "{0} no alcanzado: {1}",
-"{0}: its controllers are looked up once the flight starts.": "{0}: sus controladores se buscan en cuanto empieza el vuelo."
+"{0}: its controllers are looked up once the flight starts.": "{0}: sus controladores se buscan en cuanto empieza el vuelo.",
+"Airspace": "Espacio aéreo",
+"Departure": "Salida",
+"En route": "En ruta",
+"Flight frequencies": "Frecuencias del vuelo",
+"Frequency": "Frecuencia",
+"Online controller": "Controlador en línea",
+"Show or hide the flight's frequencies": "Mostrar u ocultar las frecuencias del vuelo",
+"Top-down: works this position too, nobody's on it": "Top-down: cubre también esta posición, no hay nadie en ella",
+"Who works it": "Quién lo controla"
 }

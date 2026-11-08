@@ -1413,5 +1413,14 @@
 "With {0}: LocalTC's ATC is quiet.": "Med {0}: LocalTC:s ATC är tyst.",
 "{0} from the next flight.": "{0} från nästa flygning.",
 "{0} not reached: {1}": "{0} nåddes inte: {1}",
-"{0}: its controllers are looked up once the flight starts.": "{0}: dess flygledare söks upp när flygningen startar."
+"{0}: its controllers are looked up once the flight starts.": "{0}: dess flygledare söks upp när flygningen startar.",
+"Airspace": "Luftrum",
+"Departure": "Avgång",
+"En route": "Under färd",
+"Flight frequencies": "Flygningens frekvenser",
+"Frequency": "Frekvens",
+"Online controller": "Onlineflygledare",
+"Show or hide the flight's frequencies": "Visa eller dölj flygningens frekvenser",
+"Top-down: works this position too, nobody's on it": "Top-down: sköter även den här positionen, ingen är på den",
+"Who works it": "Vem som sköter det"
 }

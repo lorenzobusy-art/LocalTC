@@ -49,6 +49,7 @@ from localtc.sim_api.ramp import RAMP_MHZ, on_ramp
 from localtc.sim_api import (
     AirportData,
     AtcAlert,
+    AtcOperations,
     AtcThinking,
     AtcTransmission,
     BusEvent,
@@ -298,10 +299,20 @@ class AppController:
                 self.companion.set_zones(None)
 
     def _online(self, error: str | None = None) -> None:
-        """The online network's controllers around the flight for the ATC tab: who covers the aircraft, who it should be
+        """The flight's frequencies for the Live Map (each airspace, its frequency and who works it: LocalTC, or VATSIM /
+        IVAO top-down), and with a network its controllers for the ATC tab: who covers the aircraft, who it should be
         with, and whether COM1 is on one of theirs (LocalTC quiet)."""
         engine = self.live.engine if self.live is not None else None
-        if engine is None or not engine.cfg.online_network:
+        if engine is None:
+            return
+        try:
+            frequencies = engine.frequency_plan()
+        except Exception:  # noqa: BLE001 - a table for the map: never stops the flight
+            log.exception("The flight's frequency plan failed")
+            frequencies = []
+        if not engine.cfg.online_network:
+            self.online_view = {"frequencies": frequencies}
+            self.publish("online", self.online_view)
             return
         from localtc.atc_core import online as online_atc
 
@@ -317,6 +328,7 @@ class AppController:
                             for c in sorted(engine.online, key=lambda c: (c.callsign not in here, c.callsign))
                             if c.kind != "ATIS" or (tuned is not None and c.callsign == tuned.callsign)],
             "muted": engine.online_muted,
+            "frequencies": frequencies,
         }
         self.publish("online", self.online_view)
 
@@ -695,9 +707,8 @@ class AppController:
                              "hdg": round(t.hdg_true), "gs": round(t.gs_kt), "ground": t.on_ground} for t in ev.targets]
             self.publish("traffic", self.traffic)
             return
-        if isinstance(ev, OnlineAtc) or (isinstance(ev, AtcAlert) and ev.kind in ("online", "online_back")) or (
-                isinstance(ev, RadioTuned) and self.live is not None and self.live.engine is not None
-                and self.live.engine.cfg.online_network):
+        if isinstance(ev, OnlineAtc | RadioTuned | PhaseChanged | AtcOperations) or (
+                isinstance(ev, AtcAlert) and ev.kind in ("online", "online_back", "online_gap")):
             self._online(getattr(ev, "error", None))
         if isinstance(ev, TrafficControlStatus):  # LocalTC's traffic, for Quick Settings
             self.traffic_control = {"mode": ev.mode, "source": ev.source, "live": ev.live, "parked": ev.parked,

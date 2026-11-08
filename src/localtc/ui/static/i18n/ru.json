@@ -1413,5 +1413,14 @@
 "With {0}: LocalTC's ATC is quiet.": "С {0}: УВД LocalTC молчит.",
 "{0} from the next flight.": "{0} со следующего полёта.",
 "{0} not reached: {1}": "{0} недоступно: {1}",
-"{0}: its controllers are looked up once the flight starts.": "{0}: его диспетчеры ищутся, как только начнётся полёт."
+"{0}: its controllers are looked up once the flight starts.": "{0}: его диспетчеры ищутся, как только начнётся полёт.",
+"Airspace": "Воздушное пространство",
+"Departure": "Вылет",
+"En route": "На маршруте",
+"Flight frequencies": "Частоты полёта",
+"Frequency": "Частота",
+"Online controller": "Онлайн-диспетчер",
+"Show or hide the flight's frequencies": "Показать или скрыть частоты полёта",
+"Top-down: works this position too, nobody's on it": "Сверху вниз: ведёт и эту позицию, на ней никого нет",
+"Who works it": "Кто ведёт"
 }

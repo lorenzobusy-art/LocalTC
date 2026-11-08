@@ -1413,5 +1413,14 @@
 "With {0}: LocalTC's ATC is quiet.": "与 {0}：LocalTC 的 ATC 保持安静。",
 "{0} from the next flight.": "{0} 从下次飞行起。",
 "{0} not reached: {1}": "{0} 无法连接：{1}",
-"{0}: its controllers are looked up once the flight starts.": "{0}：飞行开始后即查找其管制员。"
+"{0}: its controllers are looked up once the flight starts.": "{0}：飞行开始后即查找其管制员。",
+"Airspace": "空域",
+"Departure": "离场",
+"En route": "航路",
+"Flight frequencies": "本次飞行的频率",
+"Frequency": "频率",
+"Online controller": "在线管制员",
+"Show or hide the flight's frequencies": "显示或隐藏本次飞行的频率",
+"Top-down: works this position too, nobody's on it": "自上而下：也负责这个无人值守的席位",
+"Who works it": "由谁管制"
 }

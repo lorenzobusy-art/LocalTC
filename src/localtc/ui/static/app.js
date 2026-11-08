@@ -50,7 +50,7 @@ function connect() {
   on("cleared", clearFlight);
   on("ptt", (p) => $(p.cabin ? "#btn-cab" : p.intercom ? "#btn-ic" : "#btn-ptt").classList.toggle("down", p.down));
   on("thinking", thinking);
-  on("online", (v) => { if (S.state) S.state.online = { ...(S.state.online || {}), ...v }; Online.render(); });
+  on("online", (v) => { if (S.state) S.state.online = { ...(S.state.online || {}), ...v }; Online.render(); FreqTable.render(); });
   on("efb", (d) => Efb.update(d));  // efb.js: the checklist, Airport Ops, ATC's hold and conditions, the notes
   on("jobs", (jobs) => { S.state.jobs = jobs; Settings.jobs(jobs); Setup.jobs(jobs); });
   on("update", (u) => { S.state.update = u; Settings.update(u); UpdatePopup.update(u); });
@@ -268,6 +268,7 @@ function setOwn(o) {
   S.own = o;
   S.ownAt = Date.now();
   $("#com1").textContent = mhz(o.com1);
+  FreqTable.now();
   $("#com2").textContent = o.com2 ? mhz(o.com2) : "OFF";
   $("#com1").classList.toggle("active", o.tx !== 2);
   $("#com2").classList.toggle("active", o.tx === 2);
@@ -529,6 +530,43 @@ const Online = {
   },
 };
 $$("[data-online]").forEach((b) => (b.onclick = () => Online.choose(b.dataset.online)));
+
+// The Live Map's table of the flight's frequencies: each airspace in the order it's flown, its frequency, and who works
+// it (LocalTC, or the network's controller, top-down: one above working a position below that nobody's on). Worked out
+// by the ATC with the same rule it flies by; the row COM1 is on is lit.
+const FreqTable = {
+  PARTS: { departure: "Departure", enroute: "En route", arrival: "Arrival" },
+  render() {
+    const box = $("#map-freqs"), rows = S.state?.online?.frequencies || [];
+    if (!box) return;
+    box.hidden = !rows.length;
+    if (!rows.length) return;
+    const folded = box.classList.contains("folded");
+    let part = "";
+    const body = rows.map((r) => {
+      const head = r.part !== part ? `<tr class="fq-part"><td colspan="3">${esc(this.PARTS[r.part] || r.part)}</td></tr>` : "";
+      part = r.part;
+      const who = r.online
+        ? `<span class="fq-online" title="${r.top_down ? "Top-down: works this position too, nobody's on it" : "Online controller"}">${esc(r.who)} <span translate="no">${esc(r.station)}</span>${r.top_down ? " &#8595;" : ""}</span>`
+        : `<span class="fq-local">LocalTC <span translate="no">${esc(r.station)}</span></span>`;
+      return `${head}<tr data-mhz="${r.mhz}"><td translate="no">${esc(r.space)}</td><td class="fq-mhz">${Number(r.mhz).toFixed(3)}</td><td>${who}</td></tr>`;
+    }).join("");
+    box.innerHTML = `<button type="button" class="fq-fold" aria-expanded="${!folded}" title="Show or hide the flight's frequencies">Flight frequencies</button>
+      <table><thead><tr><th>Airspace</th><th>Frequency</th><th>Who works it</th></tr></thead><tbody>${body}</tbody></table>`;
+    box.querySelector(".fq-fold").onclick = () => {
+      const now = !box.classList.contains("folded");
+      box.classList.toggle("folded", now);
+      box.querySelector(".fq-fold").setAttribute("aria-expanded", String(!now));
+      try { localStorage.setItem("map-freqs", now ? "folded" : "open"); } catch { /* kept for this window only */ }
+    };
+    this.now();
+  },
+  now() {
+    const com1 = S.own?.com1;
+    $$("#map-freqs tr[data-mhz]").forEach((tr) => tr.classList.toggle("fq-now", com1 != null && Math.abs(Number(tr.dataset.mhz) - com1) < 0.004));
+  },
+};
+try { if (localStorage.getItem("map-freqs") === "folded") $("#map-freqs").classList.add("folded"); } catch { /* open */ }
 
 /* ---------- tabs and dialogs ---------- */
 
