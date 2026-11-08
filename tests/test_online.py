@@ -68,12 +68,15 @@ def test_the_controller_for_the_phase_falls_back_to_the_one_above():
 def test_the_pilot_is_told_and_localtc_is_quiet_on_their_frequency_then_back():
     engine, own = parked_engine(destination="KBFI", cruise_ft=12000, online_network="vatsim")
     engine.handle(OnlineAtc(t=1, network="vatsim", controllers=(ctl("KPAE_DEL", 128.0),)))
-    (told,) = alerts(engine.handle(msgspec.structs.replace(own, t=2)), "online")
-    assert told.detail == "VATSIM connection for this airspace: KPAE_DEL, set 128.000 on COM1"
-    assert alerts(engine.handle(msgspec.structs.replace(own, t=3)), "online") == []  # once
+    # On LocalTC's clearance: it hands over ("contact Paine Clearance 128.0"), the copilot not over it.
+    handover = [o for s in range(2, 8) for o in engine.handle(msgspec.structs.replace(own, t=s))]
+    assert alerts(handover, "online") == [] and "128" in transmissions(handover)[0].text
 
-    on_vatsim = msgspec.structs.replace(own, t=4, com1_mhz=128.0)
-    tuned = [o for o in engine.handle(on_vatsim) if isinstance(o, RadioTuned)]
+    on_vatsim = msgspec.structs.replace(own, t=9, com1_mhz=128.0)
+    switched = engine.handle(on_vatsim)  # (no readback said: the copilot once the pilot is on their frequency)
+    (told,) = alerts(switched, "online")
+    assert told.detail == "VATSIM connection for this airspace: KPAE_DEL, set 128.000 on COM1"
+    tuned = [o for o in switched if isinstance(o, RadioTuned)]
     assert engine.online_muted and tuned[0].station == "KPAE_DEL (VATSIM)"
     assert transmissions(say(engine, on_vatsim, 5, "Paine Clearance, 172LT, IFR to Boeing Field, ready to copy")) == []
 
@@ -332,7 +335,8 @@ def test_choosing_a_network_in_flight_starts_looking_for_its_controllers():
     engine.handle(OnlineAtc(t=1, network="ivao", controllers=()))  # chosen: nobody known yet
     assert engine.cfg.online_network == "ivao"
     engine.handle(OnlineAtc(t=2, network="ivao", controllers=(ctl("KPAE_DEL", 128.0),)))
-    (told,) = alerts(engine.handle(msgspec.structs.replace(own, t=3)), "online")
+    unicom = msgspec.structs.replace(own, t=3, com1_mhz=122.8)  # nobody of LocalTC's to hand over: the copilot, now
+    (told,) = alerts(engine.handle(unicom), "online")
     assert told.detail.startswith("IVAO connection for this airspace: KPAE_DEL")
 
 
@@ -454,7 +458,8 @@ def test_a_handoff_to_an_airspace_the_network_works_goes_to_their_frequency():
                      engine.facilities[0], handoff_to=centre)
     item = engine._scheduled[-1]
     assert item.slots == {"station": "Seattle Center", "frequency": 124.2}  # where to go, no network named
-    assert [a.kind for a in engine._pending_alerts] == ["online"]  # the copilot says it's IVAO's
+    # The copilot says it's IVAO's once the pilot has read the handover back.
+    assert engine._online_after_readback["common.contact"][0] == "ZSE_CTR"
     assert item.handoff_to.mhz == 124.2
 
 
@@ -568,3 +573,14 @@ def test_a_route_clipping_again_the_airspace_that_let_it_go_stays_where_it_is():
     out = engine.handle(clip)
     assert alerts(out, "online") == [] and "LOVV" in engine._online_released
     assert engine._online_for(engine._center()) is None or engine._center().controller == "center"
+
+
+def test_the_copilot_says_its_the_networks_after_the_readback_of_the_handover_not_over_it():
+    from localtc.sim_api import ReadbackEvaluated
+
+    engine, own = parked_engine(online_network="ivao")
+    engine.handle(OnlineAtc(t=1, network="ivao", controllers=(ctl("KPAE_DEL", 128.0),)))
+    handover = [o for s in range(2, 8) for o in engine.handle(msgspec.structs.replace(own, t=s))]
+    assert transmissions(handover) and alerts(handover, "online") == []
+    out = engine._online_reminders(own, [ReadbackEvaluated(t=8, instruction_id="common.contact", status="correct")])
+    assert [a.kind for a in out] == ["online"] and engine._online_after_readback == {}

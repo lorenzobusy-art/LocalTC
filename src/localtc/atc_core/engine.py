@@ -729,6 +729,9 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
         # controllers (Wien's other sector too) is proposed again until the flight has left it (their outline round
         # the flight is a guess; their word that it's left is not). By ``online_atc.airspace_of``.
         self._online_released: dict[str, float] = {}  # airspace: when released
+        # LocalTC's handovers to an online controller, by instruction: the copilot's "IVAO connection ..." waits for
+        # the pilot's readback (or the pilot on their frequency), never said over the controller.
+        self._online_after_readback: dict[str, tuple[str, str]] = {}  # instruction id: (callsign, the alert's words)
 
     # --- public ---------------------------------------------------------------------------
 
@@ -746,9 +749,23 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
         self.region = self._region()
         with regions.speaking(self.region):
             out = self._handle(event)
+        if self._online_after_readback:
+            out += self._online_reminders(event, out)
         if self.online_muted:
             out = [self._as_online(e) for e in out if not isinstance(e, ONLINE_QUIET)]
         return out
+
+    def _online_reminders(self, event: BusEvent, out: list[BusEvent]) -> list[BusEvent]:
+        """The copilot's "IVAO connection ..." for a handover LocalTC's controller made: once the pilot has read it
+        back, or is on the network controller's frequency already."""
+        said: list[BusEvent] = []
+        read = {e.instruction_id for e in out if isinstance(e, ReadbackEvaluated)}
+        tuned = self.online_tuned.callsign if self.online_tuned is not None else None
+        for iid, (callsign, words) in list(self._online_after_readback.items()):
+            if iid in read or callsign == tuned:
+                del self._online_after_readback[iid]
+                said.append(self._alert(event.t, "online", words))
+        return said
 
     @property
     def online_muted(self) -> bool:
@@ -1515,11 +1532,13 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
         self.online_gap = None
         if tuned is not None:
             self.online_back_to = None
-        if best is not None and not served and not online_atc.same_mhz(own.tx_mhz, best.frequency_mhz):
-            if self._online_tell(f"{best.callsign}", own.t):
+        if best is not None and not served and not online_atc.same_mhz(own.tx_mhz, best.frequency_mhz) \
+                and own.t - self._online_told.get(best.callsign, -ONLINE_TELL_AGAIN_S) >= ONLINE_TELL_AGAIN_S:
+            # On one of LocalTC's controllers: they hand over, and the copilot says it's the network's after the
+            # readback. Nobody of LocalTC's to say it (unicom): the copilot, now.
+            if not self._online_handoff(own, best, needed) and self._online_tell(best.callsign, own.t):
                 out.append(self._alert(own.t, "online", f"{net} connection for this airspace: {best.callsign}, set "
                                                         f"{online_atc.frequency_text(best.frequency_mhz)} on COM1"))
-                self._online_handoff(own, best, needed)
         elif best is None and tuned is not None and not served:
             # On a network frequency whose controller doesn't work this (ground, with the flight at the runway and no
             # tower, approach or centre online): LocalTC's controller for it, and where.
@@ -1529,7 +1548,7 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
                                                             f"LocalTC's {local.station}, set {local.mhz:.3f} on COM1"))
         return out
 
-    def _online_handoff(self, own: OwnshipState, to: OnlineController, needed: str) -> None:
+    def _online_handoff(self, own: OwnshipState, to: OnlineController, needed: str) -> bool:
         """The LocalTC controller working the flight hands it to the network's, as a controller would: "Itarrow 1128,
         contact Milano Radar 126.750, online on VATSIM" (the airspace by LocalTC's name for it). Only when the pilot
         is on one of LocalTC's controllers and nothing else is being said to them."""
@@ -1537,10 +1556,14 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
         if tuned is None or not tuned.matches(own.tx_mhz) or self.online_tuned is not None \
                 or online_atc.same_mhz(own.tx_mhz, to.frequency_mhz) \
                 or any(item.handoff_to is not None for item in self._scheduled):
-            return  # (COM1 on unicom, just off the network: no LocalTC controller there to say anything)
+            return False  # (COM1 on unicom, just off the network: no LocalTC controller there to say anything)
         local = self._local_for(needed, own)
-        self._schedule(own.t, "common.contact", {"station": local.station, "frequency": to.frequency_mhz}, tuned,
-                       handoff_to=Facility(local.controller, local.station, to.frequency_mhz, local.airport))
+        station = local.station
+        if to.kind in ("CTR", "FSS") and (area := online_atc.area_of(to)) is not None:
+            station = area.name  # their airspace's name ("Roma Radar" for LIRR_NE_CTR), not the sector still flown
+        self._schedule(own.t, "common.contact", {"station": station, "frequency": to.frequency_mhz}, tuned,
+                       handoff_to=Facility(local.controller, station, to.frequency_mhz, local.airport))
+        return True
 
     def _online_tell(self, key: str, t: float) -> bool:
         """Once, and again after ``ONLINE_TELL_AGAIN_S`` if nothing came of it."""
@@ -6339,10 +6362,9 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
             slots = {**slots, "frequency": online.frequency_mhz}
             net = online_atc.network_name(self.cfg.online_network)
             if self._online_tell(online.callsign, t):
-                self.online_best = online  # (the copilot names them)
-                self._pending_alerts.append(self._alert(t, "online", f"{net} connection for this airspace: "
-                                                        f"{online.callsign}, set "
-                                                        f"{online_atc.frequency_text(online.frequency_mhz)} on COM1"))
+                self._online_after_readback[instruction_id] = (
+                    online.callsign, f"{net} connection for this airspace: {online.callsign}, set "
+                                     f"{online_atc.frequency_text(online.frequency_mhz)} on COM1")
         due = t + (self._random().uniform(*self.cfg.response_delay_s) if delay else 0.0)
         if self._scheduled:
             # Replies decided together go out in the order they were decided: "equipment standing by" to the

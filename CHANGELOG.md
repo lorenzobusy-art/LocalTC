@@ -29,8 +29,9 @@ a new minor version adds features, a patch fixes them.
   you to them, and the flight plan waits. Off it (their "contact unicom" too), the copilot says once which LocalTC
   controller to call: the airspace after the one the network's controller worked, along the flight (released by an
   online FIR, the next FIR, never LocalTC's version of the one you left), and LocalTC carries on from there with the
-  plan. LocalTC's own controllers hand you over too, saying only where ("contact Milano Radar 126.750"); the copilot
-  is the one who says it's VATSIM's or IVAO's, once a controller. An online controller that released you isn't
+  plan. LocalTC's own controllers hand you over too, saying only where, by the network's airspace ("contact Roma
+  Radar 124.2"); the copilot is the one who says it's VATSIM's or IVAO's, once a controller, after your readback (or
+  once you're on their frequency), never over the controller. An online controller that released you isn't
   proposed again (nor any other sector of that airspace: Wien's other radar too) for twenty minutes or until you've
   left it, and a route clipping it again along a border stays with the centre it's with. On an online controller's frequency a few miles before their
   airspace (they asked on the network's chat), you're with them: no "nobody online" from the copilot; that's only for
