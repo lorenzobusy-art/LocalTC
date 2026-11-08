@@ -5943,7 +5943,11 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
                 planned = None  # a plan's predicted level at the arrival's last fix (FL250 thirty miles out): no floor
             floor = self._star_floor() or planned or plan["arrival_alt"]
             if self.region.icao:  # "descend FL110, cleared TINI9W arrival": a level to stop at, as ICAO says it
-                self._schedule(t, "center.descend_star", {"procedure": self.cfg.star, "approach": approach,
+                # "When ready": the crew starts down at their own top of descent (the FMS's), not the plan's. Only a
+                # flight already on the way down (it started before the clearance) gets it without.
+                descending = late and own.vs_fpm < -500
+                self._schedule(t, "center.descend_star" if descending else "center.descend_star_pd",
+                               {"procedure": self.cfg.star, "approach": approach,
                                                           "altitude": floor}, facility, delay=False,
                                on_issue=assigned(floor, True), note=self._altimeter_note(st.flight.destination))
                 return

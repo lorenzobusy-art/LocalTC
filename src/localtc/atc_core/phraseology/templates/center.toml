@@ -88,6 +88,14 @@ text = ["{callsign}, descend {altitude}, cleared {procedure} arrival, expect {ap
 readback = { required = ["altitude"], optional = ["procedure"] }
 pilot_readback = "Descend {altitude}, cleared {procedure} arrival, {callsign_short}."
 
+# ... given ahead of the top of descent: when ready, so the crew starts down at their own (the FMS's), not the plan's.
+[[template]]
+id = "center.descend_star_pd"
+controller = "center"
+text = ["{callsign}, when ready descend {altitude}, cleared {procedure} arrival, expect {approach} approach."]
+readback = { required = ["altitude"], optional = ["procedure"] }
+pilot_readback = "When ready descend {altitude}, cleared {procedure} arrival, {callsign_short}."
+
 [[template]]
 id = "center.checkin_descend_star"
 controller = "center"

@@ -104,3 +104,10 @@ def test_numbered_pieces_of_one_taxiway_in_a_row_are_said_as_that_taxiway():
     assert _simplified(["A", "A1"]) == ["A", "A1"]  # turning off A onto A1: said
     assert _simplified(["C3", "C", "C1"]) == ["C3", "C", "C1"]  # off the stand on C3, along C, onto C1
     assert _simplified(["B", "E", "C", "H", "GE"]) == ["B", "E", "C", "H", "GE"]
+
+
+def test_the_descent_given_ahead_of_the_top_of_descent_is_when_ready():
+    engine, own = parked_engine()
+    library = engine.libraries["icao"]
+    assert "when ready" in library.get("center.descend_star_pd").text[0]
+    assert library.get("center.descend_star_pd").readback.required == library.get("center.descend_star").readback.required
