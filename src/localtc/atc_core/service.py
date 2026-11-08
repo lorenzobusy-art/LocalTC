@@ -36,7 +36,7 @@ log = logging.getLogger(__name__)
 # way in, and it was the one fetched an hour before.
 ATIS_NEAR_NM, ATIS_NEAR_S = 300.0, 60.0
 WEATHER_CHECK_S = 30.0  # the airports' METARs looked at this often (session time); fetched in the background
-ONLINE_CHECK_S = 60.0  # the online network's controllers looked at this often (session time) ...
+ONLINE_CHECK_S = 20.0  # the online network's controllers looked at this often (session time; the store fetches each minute) ...
 ONLINE_FIRST_S = 5.0  # ... and this often until its first list is in
 
 
