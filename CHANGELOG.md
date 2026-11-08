@@ -23,6 +23,10 @@ a new minor version adds features, a patch fixes them.
   network's own client. The copilot carries on with its callouts, checklists and warnings on the intercom; a call it
   would have made on the radio it hands to you. Off their frequency, or once they log off, LocalTC's ATC takes the
   flight on from where it is. The choice can be changed in flight too: it applies at once, nothing restarted.
+  On their frequency LocalTC's last level, heading, speed and squawk are theirs: neither LocalTC nor the copilot holds
+  you to them, and the flight plan waits. Off it (their "contact unicom" too), the copilot says once which LocalTC
+  controller to call for where you are (the centre up high, not the departure you left), and LocalTC carries on from
+  there with the plan.
 - **The flight's frequencies on the Live Map:** a table on the left with every airspace of the flight in the order it's
   flown (the departure's delivery, ground, tower and departure, each FIR along the route, the arrival, tower and ground),
   its frequency, and who works it: LocalTC's controller, or the online network's (marked where it's top-down, working a

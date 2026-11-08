@@ -375,3 +375,53 @@ def test_the_choice_saved_in_flight_reaches_the_running_flight_at_once(tmp_path,
     save("vatsim")  # the same again: nothing to change
     save("local")
     assert switched == ["vatsim", ""]
+
+
+# --- online, LocalTC's clearances are the network's; back, LocalTC's controller for where the flight is ----------
+
+
+def test_on_the_networks_frequency_localtcs_level_heading_speed_and_squawk_are_not_checked():
+    engine, own = parked_engine(online_network="vatsim")
+    a = engine.state.assignments
+    a.altitude_ft, a.heading, a.speed_kt, a.squawk = 17000, 270, 250, "4512"
+    engine.handle(OnlineAtc(t=1, network="vatsim", controllers=(ctl("KPAE_GND", 121.8),)))
+    engine.handle(msgspec.structs.replace(own, t=2, com1_mhz=121.8))
+    assert engine.online_muted
+    assert (a.altitude_ft, a.heading, a.speed_kt, a.squawk) == (None, None, None, None)
+
+
+def test_off_the_network_high_up_the_pilot_is_sent_to_localtcs_centre_not_departure():
+    from localtc.sim_api import AirportData, PhaseChanged
+    from helpers.airports import kbfi
+
+    engine, own = parked_engine(destination="KBFI", cruise_ft=32000, online_network="vatsim")
+    engine.handle(AirportData(t=0, airport=kbfi()))
+    approach = ctl("SEA_APP", 119.2, lat=47.45, lon=-122.31)
+    engine.handle(OnlineAtc(t=1, network="vatsim", controllers=(approach,)))
+    climbing = msgspec.structs.replace(own, t=2, on_ground=False, alt_indicated_ft=20000, alt_msl_ft=20000,
+                                       alt_agl_ft=19400, vs_fpm=2000, gs_kt=400, com1_mhz=119.2, lat=LAT + 0.3)
+    engine.state.phase = "DEPARTURE"
+    engine.handle(climbing)
+    assert engine.online_muted
+    above = msgspec.structs.replace(climbing, t=3, alt_indicated_ft=25000, alt_msl_ft=25000, alt_agl_ft=24400)
+    (gap,) = alerts(engine.handle(above), "online_gap")  # above FL245: not the approach's any more
+    assert engine.online_gap.controller == "center" and "Center" in gap.detail
+    unicom = msgspec.structs.replace(above, t=4, com1_mhz=122.8)  # "contact unicom 122.8", as the controller says
+    back = engine.handle(unicom)
+    assert alerts(back, "online_back") and engine.online_back_to.controller == "center"
+
+
+def test_the_copilot_says_once_where_to_go_off_the_network():
+    from types import SimpleNamespace
+
+    from test_crew_monitor import FakeEngine, crew, own, said
+
+    engine = FakeEngine()
+    engine.cfg.online_network = "vatsim"
+    centre = SimpleNamespace(station="Milano Radar", mhz=135.225, controller="center")
+    engine.online_back_to = engine.joined_to = centre
+    pm = crew(engine)
+    out = pm.observe(AtcAlert(t=1.0, kind="online_back", detail="off LIMM_ANE_APP: LocalTC ATC is back"))
+    out += pm.observe(AtcAlert(t=1.0, kind="joined", detail="Joined in flight"))
+    out += [o for t in range(2, 14) for o in pm.observe(own(float(t)))]
+    assert said(out) == ["We're out of VATSIM coverage. LocalTC's Milano Radar, 135.225."]

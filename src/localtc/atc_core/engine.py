@@ -714,6 +714,7 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
         self.online_best: OnlineController | None = None
         self.online_tuned: OnlineController | None = None
         self.online_gap: Facility | None = None  # LocalTC's controller for what nobody online works now
+        self.online_back_to: Facility | None = None  # ... and the one to go to, just off the network's frequency
         self._online_told: dict[str, float] = {}  # callsign: when the pilot was told to call them
 
     # --- public ---------------------------------------------------------------------------
@@ -1487,6 +1488,8 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
             out += self._online_back(own, was, net)
         served = tuned is not None and online_atc.works(tuned, needed, own)  # COM1 on someone doing this phase's job
         self.online_gap = None
+        if tuned is not None:
+            self.online_back_to = None
         if best is not None and not served and not online_atc.same_mhz(own.tx_mhz, best.frequency_mhz):
             if self._online_tell(f"{best.callsign}", own.t):
                 out.append(self._alert(own.t, "online", f"{net} connection for this airspace: {best.callsign}, set "
@@ -1508,8 +1511,12 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
         return True
 
     def _local_for(self, needed: str, own: OwnshipState) -> Facility:
-        """LocalTC's controller for a position the network has nobody on (DEL, GND, TWR, APP, CTR): the working
-        airport's (the next one up it has, as the networks do), else the centre."""
+        """LocalTC's controller for a position the network has nobody on: in the air, the one LocalTC itself would
+        have the flight with where it is (as joining in flight works it out: at 24,000 ft over Malpensa that's the
+        centre, not departure); on the ground, the working airport's (the next one up it has), else the centre."""
+        phase = P(self.state.phase) if self.state.phase else P.PARKED
+        if not own.on_ground and phase in JOIN_PHASES and (to := self._join_target(own, phase)) is not None:
+            return to
         airport = self._working_airport()
         ladder = {"DEL": ("clearance", "ground", "tower"), "GND": ("ground", "tower"), "TWR": ("tower",),
                   "APP": ("approach", "departure") if self._arriving else ("departure", "approach")}.get(needed, ())
@@ -1581,10 +1588,14 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
         return rows
 
     def _online_quiet(self) -> None:
-        """With the online controller now: whatever LocalTC had to say, or waited for, is theirs."""
+        """With the online controller now: whatever LocalTC had to say, or waited for, is theirs, and so are the
+        level, heading, speed and squawk (theirs to give: LocalTC's last ones aren't checked, by it or the copilot).
+        The flight plan waits until LocalTC has the flight again."""
         self._scheduled = []
         self.state.pending = None
         self._joining = None
+        a = self.state.assignments
+        a.altitude_ft = a.heading = a.speed_kt = a.squawk = None
 
     def _online_switch(self, network: str) -> list[BusEvent]:
         """The pilot chose another network in flight (Only LocalTC, VATSIM hybrid, IVAO hybrid): from now on, nothing
@@ -1612,6 +1623,8 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
             self._join_in_progress(own, phase)
         elif phase is not P.PARKED:
             st.clearances.setdefault("ifr", Clearance("ifr", "clearance.ifr", "clearance", t, readback="correct"))
+        # Where the pilot goes now (the network's "contact unicom 122.8" isn't it): LocalTC's controller for here.
+        self.online_back_to = self._local_for(online_atc.need(st.phase or P.PARKED.value, own), own)
         logging.getLogger(__name__).info("ATC: off %s %s, LocalTC back", net, left.callsign)
         why = why or (f"{left.callsign} has left {net}" if gone else f"off {left.callsign}")
         return [self._alert(t, "online_back", f"{why}: LocalTC ATC is back")]
@@ -1650,11 +1663,27 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
         """Joined in flight: the controller the flight should be talking to, once the airports are known. It's where
         the pilot is sent (``comms.expected``), its first call there the check-in; the pilot is told where that is."""
         st, phase = self.state, self._joining
+        to = self._join_target(own, phase)
+        if to is None:
+            return []  # (its airport not loaded yet: asked again next second)
+        self._joining = None
+        if to.controller == "center":
+            self._sector, self._sector_since = to, own.t
+            self._radar_seen.setdefault(to.station, to)
+        st.comms.expected = to
+        self.joined_to = to
+        return [self._alert(own.t, "joined", f"Joined in flight, {phase.value.lower()}: call {to.station} on "
+                                             f"{to.mhz:.3f}. Your clearance, takeoff and squawk are taken as given.")]
+
+    def _join_target(self, own: OwnshipState, phase: P) -> Facility | None:
+        """The controller a flight joined in flight (or handed back from an online network) should be with where it
+        is: the destination's ground or tower once down or close in, its approach low near it, the departure's low
+        near the origin, else the centre for where it is. None until the airports it needs are loaded."""
+        st = self.state
         origin, dest = self.geometry(st.flight.origin), self.geometry(st.flight.destination)
         if (st.flight.origin and origin is None and phase is P.DEPARTURE) or (st.flight.destination and dest is None
                                                                              and phase is not P.DEPARTURE):
-            return []  # (its airport not loaded yet: asked again next second)
-        self._joining = None
+            return None
 
         def at(geo, controller: str) -> Facility | None:
             return next((f for f in self.facilities if f.controller == controller and geo is not None
@@ -1673,14 +1702,7 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
             to = at(dest, "approach")
         elif phase is P.DEPARTURE and near(origin, JOIN_TERMINAL_NM) and low:
             to = at(origin, "departure")
-        if to is None:
-            to = self._sector_candidate(own) or self._center()
-            self._sector, self._sector_since = to, own.t
-            self._radar_seen.setdefault(to.station, to)
-        st.comms.expected = to
-        self.joined_to = to
-        return [self._alert(own.t, "joined", f"Joined in flight, {phase.value.lower()}: call {to.station} on "
-                                             f"{to.mhz:.3f}. Your clearance, takeoff and squawk are taken as given.")]
+        return to or self._sector_candidate(own) or self._center()
 
     def _on_phase_change(self, change: PhaseChanged, own: OwnshipState) -> list[BusEvent]:
         st, t = self.state, change.t
