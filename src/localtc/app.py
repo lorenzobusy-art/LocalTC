@@ -90,6 +90,7 @@ def engine_config(flight: FlightConfig, atc: AtcConfig):
         arr_runway=flight.arr_runway or None,
         enforce_fpln_runways=atc.enforce_fpln_runways,
         traffic_runways=atc.traffic_runways,
+        online_network=atc.online_network if atc.online_integration and atc.online_network in ("vatsim", "ivao") else "",
         airport_fixes=str(data_dir() / "airport_fixes.toml"),
         route=tuple(RouteFix(ident=f.ident, lat=f.lat, lon=f.lon, alt_ft=f.alt_ft, stage=f.stage, time_s=f.time_s,
                              via=f.via) for f in flight.fixes),
@@ -631,6 +632,13 @@ async def run_session(
                 if cfg.atc.atis_source in ("real", "hybrid"):
                     atc_service.weather_source = MetarStore().get
                     atc_service.atis_source = AtisStore().get
+            if session.source_kind == "live" and engine.cfg.online_network:
+                from localtc.online import OnlineStore
+
+                # The online network's controllers ([atc] online_network), looked up each minute.
+                atc_service.online_source = OnlineStore(engine.cfg.online_network).get
+                log.info("Online ATC: %s, LocalTC's ATC quiet on its controllers' frequencies",
+                         engine.cfg.online_network.upper(), extra=CONSOLE)
             consumers.append(asyncio.create_task(atc_service.run()))
             cabin = None
             if cfg.cabin.enabled:  # the cabin crew: the announcements, the service, "cabin, ..." on the intercom

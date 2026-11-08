@@ -325,6 +325,14 @@ class Monitor(WatchMixin):
                 and (to := getattr(self.engine, "joined_to", None)) is not None and self.radio_mode() != "full":
             # (The copilot on the radio calls them itself.)
             self._call("joined", ROUTINE, t, f"We should be with {to.station}, {speech.frequency_display(to.mhz)}.")
+        elif isinstance(ev, AtcAlert) and ev.kind == "online" and self.engine is not None \
+                and (c := getattr(self.engine, "online_best", None)) is not None:
+            # An online network's controller covers the airspace ([atc] online_network): said whatever the verbosity.
+            net = {"vatsim": "VATSIM", "ivao": "IVAO"}.get(getattr(self.engine.cfg, "online_network", ""), "Online")
+            self._call(f"online:{c.callsign}", SAFETY, t, f"{net} connection for this airspace, set "
+                                                         f"{speech.frequency_display(c.frequency_mhz)} on COM1.", again_s=600.0)
+        elif isinstance(ev, AtcAlert) and ev.kind == "online_back":
+            self._call("online_back", SAFETY, t, "No online controller with us now, LocalTC ATC is back.", again_s=60.0)
         elif isinstance(ev, AtcAlert) and ev.kind == "emergency":
             self._call("emergency", ROUTINE, t, "Copy the emergency. Want me to squawk 7700?")
             self.offer = Offer("squawk", "7700", t + 20.0)

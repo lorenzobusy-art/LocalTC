@@ -23,6 +23,7 @@ import msgspec
 from localtc.sim_api.ramp import on_ramp
 from localtc.atc_core import chatter, disfluency, personality, procedures, radio_range, vectors
 from localtc.atc_core import region as regions
+from localtc.atc_core import online as online_atc
 from localtc.atc_core.airport import (
     AirportGeometry,
     TaxiGraph,
@@ -115,6 +116,8 @@ from localtc.sim_api import (
     AircraftIdentity,
     AtcOperations,
     NoticesReport,
+    OnlineAtc,
+    OnlineController,
     OpsSnapshot,
     TerrainGrid,
     Airport,
@@ -147,6 +150,9 @@ from localtc.sim_api import (
 )
 
 P = FlightPhase
+# COM1 on an online network's controller: what LocalTC's ATC would have said, it doesn't (``AtcEngine.online_muted``).
+ONLINE_QUIET = (AtcTransmission, RadioChatter, AtcThinking, ReadbackEvaluated)
+ONLINE_TELL_AGAIN_S = 600.0  # a controller the pilot was told of and didn't call: said again after this long
 # The calls to LocalTC's real flights (``traffic_call``), and the controller who makes each.
 TRAFFIC_CALLS = {"clearance": "clearance", "pushback": "ground", "taxi_out": "ground", "taxi_in": "ground",
                  "lineup": "tower", "takeoff": "tower", "land": "tower", "go_around": "tower", "hold_short": "tower",
@@ -499,6 +505,9 @@ class EngineConfig:
     atis_source: str = "hybrid"  # sim, real, hybrid (``_atis_inputs``)
     destination_weather: bool = True  # a far airport's runway from its weather or calm; off: the wind here (older ones)
     gate_radius_m: float = 30.0  # this close to a gate or parking spot at the destination is parked at it (``arrived``)
+    # The online network flown beside LocalTC ("vatsim", "ivao"; "": LocalTC's ATC alone): with COM1 on one of its
+    # controllers covering the aircraft, LocalTC's ATC is quiet; the pilot is told when one covers the airspace.
+    online_network: str = ""
 
 
 @dataclass
@@ -699,6 +708,12 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
         self._arrived = False  # ... and said so (once a flight)
         self._landed = False  # landed and taxiing in, this session
         self._callsign_asked: tuple[Transcript, Facility] | None = None  # the call that got "say again your callsign"
+        # Online ATC ([atc] online_network): the network's controllers around the flight (``OnlineAtc``), the one it
+        # should be with (told to the pilot when it changes), the one COM1 is on (LocalTC quiet then).
+        self.online: tuple[OnlineController, ...] = ()
+        self.online_best: OnlineController | None = None
+        self.online_tuned: OnlineController | None = None
+        self._online_told: dict[str, float] = {}  # callsign: when the pilot was told to call them
 
     # --- public ---------------------------------------------------------------------------
 
@@ -715,7 +730,22 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
         # Everything said in this step is worded for where the controller the pilot is talking to sits.
         self.region = self._region()
         with regions.speaking(self.region):
-            return self._handle(event)
+            out = self._handle(event)
+        if self.online_muted:
+            out = [self._as_online(e) for e in out if not isinstance(e, ONLINE_QUIET)]
+        return out
+
+    @property
+    def online_muted(self) -> bool:
+        """COM1 on an online network's controller covering the aircraft: LocalTC's ATC says nothing."""
+        return self.online_tuned is not None
+
+    def _as_online(self, event: BusEvent) -> BusEvent:
+        """COM1 tuned to the online controller: the radio log names them."""
+        if isinstance(event, RadioTuned) and (c := self.online_tuned) is not None:
+            return RadioTuned(t=event.t, radio=event.radio, frequency_mhz=event.frequency_mhz, controller="online",
+                              station=f"{c.callsign} ({online_atc.network_name(self.cfg.online_network)})")
+        return event
 
     def _region(self) -> regions.Region:
         """FAA or ICAO, and the transition altitude: from the facility tuned (its airport, or for a centre
@@ -808,6 +838,9 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
                 self._watch_runway_flow(event.t)
             self._seen_airborne.update(target.object_id for target in event.targets if not target.on_ground)
             self._note_wake(event.t)
+        elif isinstance(event, OnlineAtc):
+            if event.network == self.cfg.online_network:
+                self.online = event.controllers
         elif isinstance(event, OwnshipState):
             out += self._on_ownship(event)
         elif isinstance(event, PttPressed):
@@ -823,8 +856,8 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
             self._ptt_since = self._stt_since = None
             if event.source == "copilot":
                 self._radio_busy_until = max(self._radio_busy_until, event.t + self._speech_s(event.text))
-            if event.text.strip():  # an empty one: push-to-talk carried no speech, nothing to answer
-                out += self._on_pilot(event)
+            if event.text.strip() and not (self.online_muted and event.radio != 0):
+                out += self._on_pilot(event)  # (empty: push-to-talk carried no speech; online: theirs to answer)
             self._tx_mhz = None
         out += self._flush(event.t)
         out += self._release_later(event.t)
@@ -1317,6 +1350,8 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
         change = self.tracker.handle(raw)
         ctx = self.tracker.context
         out: list[BusEvent] = []
+        if self.cfg.online_network:
+            out += self._online_update(own)
 
         self._find_origin(own, ctx.airport)
         dest = st.flight.destination
@@ -1375,8 +1410,8 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
             out += self._on_phase_change(change, own)
         if self._joining is not None:
             out += self._joined_with(own)
-        if not self.tracker.paused:
-            out += self._monitor(own)  # paused, the world stands still: no calls of ATC's own
+        if not self.tracker.paused and not self.online_muted:
+            out += self._monitor(own)  # paused, the world stands still: no calls of ATC's own (online: none of LocalTC's)
         out += self._arrived_at_gate(own)
         out += self._pending_alerts
         self._pending_alerts = []
@@ -1431,6 +1466,47 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
         spots = [p for p in geo.airport.parking
                  if math.dist(here, geo.xy(p.lat, p.lon)) <= max(p.radius_m, self.cfg.gate_radius_m)]
         return "parking" if spots else None
+
+    def _online_update(self, own: OwnshipState) -> list[BusEvent]:
+        """The online network beside LocalTC: the pilot told when a controller of theirs covers the airspace (and the
+        flight isn't with one already), LocalTC quiet while COM1 is on one, and back when it isn't."""
+        out: list[BusEvent] = []
+        net = online_atc.network_name(self.cfg.online_network)
+        was = self.online_tuned
+        self.online_tuned = online_atc.tuned_to(self.online, own)
+        self.online_best = best = online_atc.best(self.online, own, self.state.phase or P.PARKED.value)
+        if was is None and self.online_tuned is not None:
+            self._online_quiet()
+            logging.getLogger(__name__).info("ATC: with %s %s, LocalTC quiet", net, self.online_tuned.callsign)
+        elif was is not None and self.online_tuned is None:
+            out += self._online_back(own, was, net)
+        if best is not None and self.online_tuned is None and not online_atc.same_mhz(own.tx_mhz, best.frequency_mhz) \
+                and own.t - self._online_told.get(best.callsign, -ONLINE_TELL_AGAIN_S) >= ONLINE_TELL_AGAIN_S:
+            self._online_told[best.callsign] = own.t
+            out.append(self._alert(own.t, "online", f"{net} connection for this airspace: {best.callsign}, set "
+                                                    f"{online_atc.frequency_text(best.frequency_mhz)} on COM1"))
+        return out
+
+    def _online_quiet(self) -> None:
+        """With the online controller now: whatever LocalTC had to say, or waited for, is theirs."""
+        self._scheduled = []
+        self.state.pending = None
+        self._joining = None
+
+    def _online_back(self, own: OwnshipState, left: OnlineController, net: str) -> list[BusEvent]:
+        """Off the online controller's frequency (retuned, or they're gone): LocalTC's ATC takes the flight on from where
+        it is, as if it had just joined it (what the network's controllers gave is taken as given)."""
+        st, t = self.state, own.t
+        gone = all(c.callsign != left.callsign for c in self.online)
+        st.comms.last_atc_t = st.comms.last_pilot_t = t  # no "how do you read?" the moment it's back
+        phase = P(st.phase) if st.phase else P.PARKED
+        if phase in JOIN_PHASES:
+            self._join_in_progress(own, phase)
+        elif phase is not P.PARKED:
+            st.clearances.setdefault("ifr", Clearance("ifr", "clearance.ifr", "clearance", t, readback="correct"))
+        logging.getLogger(__name__).info("ATC: off %s %s, LocalTC back", net, left.callsign)
+        why = f"{left.callsign} has left {net}" if gone else f"off {left.callsign}"
+        return [self._alert(t, "online_back", f"{why}: LocalTC ATC is back")]
 
     def _join_in_progress(self, own: OwnshipState, phase: P) -> None:
         """LocalTC started with the flight already under way (the app restarted in the air, a flight loaded in the

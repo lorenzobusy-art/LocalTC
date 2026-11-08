@@ -64,6 +64,7 @@ from localtc.sim_api import (
     PttReleased,
     RadioTuned,
     TrafficControlStatus,
+    OnlineAtc,
     TrafficSnapshot,
     encode_event,
 )
@@ -126,6 +127,7 @@ class AppController:
         self.flight: dict = {}
         self.jobs: dict[str, dict] = {}
         self.muted = False
+        self.online_view: dict = {}  # the online network's controllers, for the ATC tab (``_online``)
         self.account_prompt = False
         self._notes: str | None = None  # this version's CHANGELOG section, read once for "what's new"
         self.traffic_control: dict | None = None  # EXPERIMENTAL traffic control's last status  # show the one-time account suggestion (after the third flight)
@@ -295,6 +297,29 @@ class AppController:
             else:
                 self.companion.set_zones(None)
 
+    def _online(self, error: str | None = None) -> None:
+        """The online network's controllers around the flight for the ATC tab: who covers the aircraft, who it should be
+        with, and whether COM1 is on one of theirs (LocalTC quiet)."""
+        engine = self.live.engine if self.live is not None else None
+        if engine is None or not engine.cfg.online_network:
+            return
+        from localtc.atc_core import online as online_atc
+
+        own = engine.state.aircraft
+        here = {c.callsign for c in online_atc.covering(engine.online, own)} if own is not None else set()
+        best, tuned = engine.online_best, engine.online_tuned
+        self.online_view = {
+            "active": engine.cfg.online_network,
+            "error": error if error is not None else self.online_view.get("error", ""),
+            "controllers": [{"callsign": c.callsign, "mhz": c.frequency_mhz, "kind": c.kind, "covering": c.callsign in here,
+                             "best": best is not None and c.callsign == best.callsign,
+                             "tuned": tuned is not None and c.callsign == tuned.callsign}
+                            for c in sorted(engine.online, key=lambda c: (c.callsign not in here, c.callsign))
+                            if c.kind != "ATIS" or (tuned is not None and c.callsign == tuned.callsign)],
+            "muted": engine.online_muted,
+        }
+        self.publish("online", self.online_view)
+
     def state(self) -> dict:
         return {
             "status": self.status, "detail": self.status_detail,
@@ -322,6 +347,9 @@ class AppController:
             # that has seen the welcome already.
             "setup": not self.cfg.ui.setup_done and not self.cfg.ui.welcome_seen,
             "whats_new": self._whats_new(),
+            # VATSIM/IVAO beside LocalTC: on, the ATC tab asks which (``network`` "" until chosen); what's online.
+            "online": {"integration": self.cfg.atc.online_integration, "network": self.cfg.atc.online_network,
+                       **self.online_view},
         }
 
     def _whats_new(self) -> dict | None:
@@ -404,6 +432,9 @@ class AppController:
     async def start(self) -> None:
         if self._task is not None and not self._task.done():
             raise HttpError(409, "a flight is already running")
+        if self.cfg.atc.online_integration and not self.cfg.atc.online_network:
+            raise HttpError(409, "Choose Local ATC, VATSIM or IVAO on the ATC tab before starting the flight")
+        self.online_view = {}
         if self.source_kind == "live" and next_shift(self.cfg.ui.last_flight_end, self.cfg.atc.shift, time.time()) != self.cfg.atc.shift:
             self.cfg.atc.shift += 1  # back after a break: other controllers on (saved with the flight count)
             log.info("ATC: a new shift (%d) since the last flight", self.cfg.atc.shift)
@@ -664,6 +695,10 @@ class AppController:
                              "hdg": round(t.hdg_true), "gs": round(t.gs_kt), "ground": t.on_ground} for t in ev.targets]
             self.publish("traffic", self.traffic)
             return
+        if isinstance(ev, OnlineAtc) or (isinstance(ev, AtcAlert) and ev.kind in ("online", "online_back")) or (
+                isinstance(ev, RadioTuned) and self.live is not None and self.live.engine is not None
+                and self.live.engine.cfg.online_network):
+            self._online(getattr(ev, "error", None))
         if isinstance(ev, TrafficControlStatus):  # LocalTC's traffic, for Quick Settings
             self.traffic_control = {"mode": ev.mode, "source": ev.source, "live": ev.live, "parked": ev.parked,
                                     "native": ev.native, "fsltl": ev.fsltl, "note": ev.note, "recent": list(ev.recent)}
@@ -1045,6 +1080,8 @@ class AppController:
             raise HttpError(400, "The intercom key can't be the push-to-talk key")
         if cfg.voice.cabin_key and cfg.voice.cabin_key in (cfg.voice.ptt_key, cfg.voice.intercom_key):
             raise HttpError(400, "The cabin key can't be the push-to-talk key or the intercom key")
+        if cfg.atc.online_integration and not self.cfg.atc.online_integration:
+            cfg.atc.online_network = ""  # turned on: the ATC tab asks which network before the next flight
         path = await asyncio.to_thread(save_settings, cfg, base=load_config(self.config_path, settings=None))
         live_now = self.live is not None
         interpreter = getattr(self.live.engine, "interpreter", None) if self.live is not None else None
