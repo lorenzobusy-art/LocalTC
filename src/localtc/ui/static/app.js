@@ -46,6 +46,7 @@ function connect() {
   on("radio", addLine);
   on("own", setOwn);
   on("traffic", (t) => { S.traffic = t; MapView.traffic(t); });
+  on("network_traffic", (t) => { S.networkTraffic = t; MapView.network(t); });
   on("flight", (f) => { setFlight(f); MapView.flightChanged(f); });
   on("cleared", clearFlight);
   on("ptt", (p) => $(p.cabin ? "#btn-cab" : p.intercom ? "#btn-ic" : "#btn-ptt").classList.toggle("down", p.down));
@@ -2651,7 +2652,7 @@ const Settings = {
 
 
 const MapView = {
-  fetched: new Set(), map: null, ownMarker: null, trail: null, path: AtcMap.track(), tfc: new Map(), route: null, routeLayer: null, follow: true, tileLayer: null, drawnAirports: new Set(),
+  fetched: new Set(), map: null, ownMarker: null, trail: null, path: AtcMap.track(), tfc: new Map(), net: new Map(), route: null, routeLayer: null, follow: true, tileLayer: null, drawnAirports: new Set(),
   zoneLayer: null, zonesOn: true, zonesTimer: null, zonesAt: 0, zonesWho: "", drawnRef: null,
   wxLayer: null, wxOn: true, wxAt: 0, wxWhere: null, radarLayer: null, opsLayer: null, atcOps: null, notamLayer: null,
   zoneAirports: [],
@@ -2709,6 +2710,7 @@ const MapView = {
     $("#map-route").onclick = () => { this.setFollow(false); if (this.route) this.map.fitBounds(this.route.getBounds(), { padding: [30, 30] }); else toast("No flight plan route"); };
     if (S.own) this.own(S.own);
     this.traffic(S.traffic);
+    this.network(S.networkTraffic || []);
     this.plan(S.state.plan);
   },
   tiles() {
@@ -2823,6 +2825,12 @@ const MapView = {
   traffic(list) {
     if (!this.map) return;
     AtcMap.traffic(this.map, this.tfc, list);  // atcmap.js: the website's Flight Tracker draws them the same way
+  },
+  // VATSIM / IVAO hybrid: the network's pilots around the flight that the sim doesn't show (its type says which
+  // network), drawn as traffic too. The nearest are in the sim already, and drawn from there.
+  network(list) {
+    if (!this.map) return;
+    AtcMap.traffic(this.map, this.net, list);
   },
   plan(p) {
     if (!this.map) return;

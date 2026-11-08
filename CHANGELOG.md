@@ -97,6 +97,11 @@ a new minor version adds features, a patch fixes them.
 - **VATSIM / IVAO hybrid flies with the network's traffic:** LocalTC's own real-world flights are off then (chosen
   in flight too), so the sky isn't two skies on top of each other; ATC sees the network's aircraft the pilot client
   puts in the sim, for traffic and the runway. Only LocalTC brings LocalTC's traffic back, as set.
+- **The network's pilots on the Live Map:** with VATSIM / IVAO hybrid, the network's pilots within 250 nm are drawn
+  as traffic (their type says which network), from the same download as its controllers; the nearest, which the
+  pilot client puts in the sim, are drawn from the sim as before.
+- **Other flights' taxi routes from where they are:** a controller tells another aircraft (VATSIM's, IVAO's or the
+  sim's) the taxiways from its own stand or taxiway to its runway, not a route from some other gate.
 - **The descent says where to stop, in Europe as Europe does:** "descend FL110, cleared TINI9W arrival" at the top of
   descent (not "descend via" alone, the FAA's), "continue descent FL110" from the next centre, and the approach
   clearance on a STAR with the altitude to join the final at ("descend 4,000 feet, cleared ILS runway 09R approach"),

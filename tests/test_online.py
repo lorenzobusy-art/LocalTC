@@ -463,3 +463,31 @@ def test_released_by_the_networks_approach_the_pilot_goes_to_the_airspace_after_
     engine.handle(OnlineAtc(t=1, network="vatsim", controllers=(approach,)))
     after = engine._after_online(approach)
     assert after.controller == "center" and after.station == "Seattle Center"  # not Seattle Departure (theirs)
+
+
+# --- the network's pilots, for the Live Map ------------------------------------------------------------------------
+
+
+def test_the_feeds_give_the_networks_pilots_where_they_are():
+    from localtc.online import parse_ivao_pilots, parse_vatsim_pilots
+
+    vatsim = {"pilots": [{"callsign": "ASA1083", "latitude": 47.45, "longitude": -122.30, "altitude": 383,
+                          "heading": 130, "groundspeed": 0, "flight_plan": {"aircraft_short": "B739"}},
+                         {"callsign": "DAL5", "latitude": None, "longitude": 1, "altitude": 0}]}  # nowhere: left out
+    (p,) = parse_vatsim_pilots(vatsim)
+    assert (p["callsign"], p["type"], p["ground"], p["hdg"]) == ("ASA1083", "B739", True, 130)
+    ivao = {"clients": {"pilots": [{"callsign": "QTR8", "lastTrack": {"latitude": 33.4, "longitude": -15.0,
+                                                                     "altitude": 34773, "groundSpeed": 581, "heading": 77,
+                                                                     "onGround": False},
+                                    "flightPlan": {"aircraftId": "B772"}}]}}
+    (q,) = parse_ivao_pilots(ivao)
+    assert (q["callsign"], q["alt"], q["ground"]) == ("QTR8", 34773, False)
+
+
+def test_the_store_keeps_the_pilots_from_the_same_download_and_finds_those_near():
+    near = {"callsign": "ASA1083", "lat": LAT + 0.2, "lon": LON, "alt": 5000, "hdg": 0, "gs": 250, "type": "B739",
+            "ground": False}
+    far = {**near, "callsign": "QTR8", "lat": 25.0, "lon": 51.0}
+    store = OnlineStore("vatsim", fetcher=lambda network: ([ctl("KPAE_TWR", 132.95)], [near, far]), background=False)
+    controllers, _ = store.get()
+    assert len(controllers) == 1 and [p["callsign"] for p in store.pilots_near(LAT, LON, 250)] == ["ASA1083"]

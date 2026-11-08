@@ -150,6 +150,7 @@ from localtc.sim_api import (
 )
 
 P = FlightPhase
+ROUTES_FROM_KEPT = 400  # other aircraft's routes from where they were, kept this many at most
 STAR_INTERCEPT_AGL_FT = 3000  # an ILS final joined about this high above the field, where nothing better is known
 KNOWN_FIX_RATIO = 0.6  # a misheard fix name this like a known one is that one ("knob" and NOBKE: 0.67)
 STAR_FLOOR_MAX_FT = 18000  # a plan's last arrival altitude above this is its predicted profile, not where a STAR ends
@@ -674,6 +675,7 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
         self._continued_t = -math.inf  # when tower last said "continue" for traffic on the runway
         self._gate_changed = False  # a gate asked for (Airport Ops) after the taxi in was given: a new route
         self._gate_asked = False  # a gate the pilot asked for and got (the gate map): theirs, shown
+        self._routes_from: dict[tuple, tuple[str, ...]] = {}  # other aircraft's taxi routes from where they were
         self._star_legs: dict[str, tuple] = {}  # the destination's arrivals (the sim's navdata) by name
         self._radar_seen: dict[str, Facility] = {}
         self._expected_runway: str | None = None  # the runway the IFR clearance said to expect
@@ -2335,6 +2337,20 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
         self._radio_busy_until = max(self._radio_busy_until, at)  # ATC doesn't talk over its own other traffic
         return self._paced(out)
 
+    def _route_from(self, geo: AirportGeometry | None, target: TrafficTarget, runway: str) -> tuple[str, ...]:
+        """Another aircraft's taxi route to its runway from where it actually is (VATSIM's, IVAO's or the sim's own):
+        ground tells it the taxiways it'll take, not a route from another gate. Empty: none found."""
+        end = geo.end(runway) if geo is not None and runway else None
+        if end is None:
+            return ()
+        key = (target.object_id, round(target.lat, 4), round(target.lon, 4), runway)
+        if key not in self._routes_from:
+            if len(self._routes_from) > ROUTES_FROM_KEPT:
+                self._routes_from.clear()  # (taxiing aircraft move on: the old ones are no use)
+            route = self._taxi_graph(geo).departure_route(target.lat, target.lon, end)
+            self._routes_from[key] = route.taxiways if route is not None and route.taxiways else ()
+        return self._routes_from[key]
+
     def _chatter_routes(self, geo: AirportGeometry, end) -> list[tuple[str, ...]]:
         """Real taxi routes at this airport, from a few of its gates to the runway in use (the other way round
         for arrivals), worked out once: other flights taxi along the taxiways that are there."""
@@ -2394,7 +2410,9 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
                                                lat=target.lat, lon=target.lon, key=callsign.ident, t=own.t) or ""
                     if lined_up and lined_up not in by_runway and (end_for := geo.end(lined_up)) is not None:
                         by_runway[lined_up] = self._chatter_routes(geo, end_for)
-                other = chatter.Other(oid, callsign, doing, int(round(target.alt_ft / 1000) * 1000), lined_up)
+                route = self._route_from(geo, target, lined_up) if doing in ("at_gate", "taxiing_out") else ()
+                other = chatter.Other(oid, callsign, doing, int(round(target.alt_ft / 1000) * 1000), lined_up,
+                                      route=route)
                 if plan is not None and doing in ("descending", "level"):
                     other = self._other_arrival(other, target, geo, plan, own)
                 others.append(other)

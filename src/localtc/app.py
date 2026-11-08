@@ -575,6 +575,7 @@ async def run_session(
     guide = None
     ground = None
     engine = atc_service = None
+    online_store = None
     pm = None
     flight_log = None
     try:
@@ -636,7 +637,8 @@ async def run_session(
                 from localtc.online import OnlineStore
 
                 # The online network's controllers ([atc] online_network), looked up each minute.
-                atc_service.online_source = OnlineStore(engine.cfg.online_network).get
+                online_store = OnlineStore(engine.cfg.online_network)
+                atc_service.online_source = online_store.get
                 log.info("Online ATC: %s, LocalTC's ATC quiet on its controllers' frequencies",
                          engine.cfg.online_network.upper(), extra=CONSOLE)
             consumers.append(asyncio.create_task(atc_service.run()))
@@ -732,7 +734,7 @@ async def run_session(
         if on_ready is not None:
             on_ready(LiveSession(cfg=cfg, bus=bus, source=source, session=session, engine=engine, atc=atc_service,
                                  voice=voice, speaker=speaker, recording=recorder.session_dir if recorder else None,
-                                 crew=pm, traffic=traffic, guide=guide, ground=ground))
+                                 crew=pm, traffic=traffic, guide=guide, ground=ground, online_store=online_store))
         waits = [asyncio.create_task(e.wait()) for e in (stop, arrived) if e is not None]
         await asyncio.wait({pump_task, *waits}, return_when=asyncio.FIRST_COMPLETED)
         for task in waits:
@@ -840,6 +842,7 @@ class LiveSession:
     traffic: object | None = None  # traffic.service.TrafficService (None when off)
     guide: object | None = None  # taxi_guidance.TaxiGuidance
     ground: object | None = None  # ground.service.GroundService (None when off)
+    online_store: object | None = None  # online.OnlineStore: the network's controllers and pilots (None: no network)
 
     def now(self) -> float:
         return self.source.clock.now()
@@ -854,10 +857,12 @@ class LiveSession:
         if self.atc is None:
             return
         source = None
+        self.online_store = None
         if network and self.session.source_kind == "live":
             from localtc.online import OnlineStore
 
-            source = OnlineStore(network).get
+            self.online_store = OnlineStore(network)
+            source = self.online_store.get
         self.atc.set_online(network, source, self.now())
         log.info("Online ATC: %s from now", network.upper() if network else "LocalTC only")
 

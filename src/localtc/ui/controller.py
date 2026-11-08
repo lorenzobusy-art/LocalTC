@@ -76,6 +76,7 @@ from localtc.ui.updates import Updates
 
 log = logging.getLogger(__name__)
 
+NETWORK_TRAFFIC_NM = 250.0  # the online network's pilots drawn on the Live Map this far around the flight
 RADIO_HISTORY = 400
 COMPONENTS = ("ollama", "gpu", "webview2")  # installed from the app (localtc.components), as the models are
 OWN_EVERY_S = 0.25
@@ -129,6 +130,7 @@ class AppController:
         self.jobs: dict[str, dict] = {}
         self.muted = False
         self.online_view: dict = {}  # the online network's controllers, for the ATC tab (``_online``)
+        self._network_shown = False  # the network's pilots are on the Live Map (``_network_traffic``)
         self.account_prompt = False
         self._notes: str | None = None  # this version's CHANGELOG section, read once for "what's new"
         self.traffic_control: dict | None = None  # EXPERIMENTAL traffic control's last status  # show the one-time account suggestion (after the third flight)
@@ -297,6 +299,24 @@ class AppController:
                 self._companion_zones_soon()
             else:
                 self.companion.set_zones(None)
+
+    def _network_traffic(self) -> None:
+        """The online network's pilots around the flight for the Live Map, the ones the sim doesn't show already (the
+        pilot client puts the nearest in the sim: those are drawn as its traffic, where they are exactly)."""
+        store = getattr(self.live, "online_store", None) if self.live is not None else None
+        own = self.own
+        if store is None or own is None:
+            if self._network_shown:
+                self._network_shown = False
+                self.publish("network_traffic", [])
+            return
+        in_sim = {str(t.get("callsign") or "").replace(" ", "").upper() for t in self.traffic}
+        net = {"vatsim": "VATSIM", "ivao": "IVAO"}.get(store.network, store.network.upper())
+        shown = [{"id": f"net:{p['callsign']}", "callsign": p["callsign"], "type": f"{p['type']} {net}".strip(),
+                  "lat": p["lat"], "lon": p["lon"], "alt": p["alt"], "hdg": p["hdg"], "gs": p["gs"], "ground": p["ground"]}
+                 for p in store.pilots_near(own["lat"], own["lon"], NETWORK_TRAFFIC_NM) if p["callsign"] not in in_sim]
+        self._network_shown = bool(shown)
+        self.publish("network_traffic", shown)
 
     def _online(self, error: str | None = None) -> None:
         """The flight's frequencies for the Live Map (each airspace, its frequency and who works it: LocalTC, or VATSIM /
@@ -584,6 +604,7 @@ class AppController:
             try:
                 self.flight = self.flight_view()
                 self.publish("flight", self.flight)
+                self._network_traffic()
                 await self.pilot.live(self.companion_view())
             except Exception:
                 log.exception("Flight view failed")

@@ -91,25 +91,69 @@ def parse_ivao(data: dict) -> list[OnlineController]:
     return out
 
 
-def fetch(network: str, getter: Callable[[str], Any] = http_json) -> list[OnlineController]:
-    """The network's controllers now (blocking)."""
+GROUND_KT = 50  # a pilot slower than this is on the ground, where the network doesn't say
+
+
+def _pilot(callsign: Any, lat: Any, lon: Any, alt: Any, hdg: Any, gs: Any, kind: Any, ground: Any = None) -> dict | None:
+    try:
+        lat, lon = float(lat), float(lon)
+    except (TypeError, ValueError):
+        return None
+    gs = int(float(gs or 0))
+    return {"callsign": str(callsign or "").upper(), "lat": lat, "lon": lon, "alt": int(float(alt or 0)),
+            "hdg": int(float(hdg or 0)) % 360, "gs": gs, "type": str(kind or ""),
+            "ground": bool(ground) if ground is not None else gs < GROUND_KT}
+
+
+def parse_vatsim_pilots(data: dict) -> list[dict]:
+    """VATSIM's pilots: where each is, how high and fast, its type (its flight plan's)."""
+    out = []
+    for p in data.get("pilots") or ():
+        plan = p.get("flight_plan") or {}
+        found = _pilot(p.get("callsign"), p.get("latitude"), p.get("longitude"), p.get("altitude"), p.get("heading"),
+                       p.get("groundspeed"), plan.get("aircraft_short"))
+        if found is not None and found["callsign"]:
+            out.append(found)
+    return out
+
+
+def parse_ivao_pilots(data: dict) -> list[dict]:
+    """IVAO's pilots, from their last position."""
+    out = []
+    for p in ((data.get("clients") or {}).get("pilots")) or ():
+        track, plan = p.get("lastTrack") or {}, p.get("flightPlan") or {}
+        found = _pilot(p.get("callsign"), track.get("latitude"), track.get("longitude"), track.get("altitude"),
+                       track.get("heading"), track.get("groundSpeed"), plan.get("aircraftId"), track.get("onGround"))
+        if found is not None and found["callsign"]:
+            out.append(found)
+    return out
+
+
+def fetch_all(network: str, getter: Callable[[str], Any] = http_json) -> tuple[list[OnlineController], list[dict]]:
+    """The network's controllers and pilots now (blocking): one download for both."""
     if network == "vatsim":
-        data = getter(VATSIM_DATA)
+        data = getter(VATSIM_DATA) or {}
         try:
             transceivers = getter(VATSIM_TRANSCEIVERS)
         except Exception as exc:  # noqa: BLE001 - the airports' places still do for most
             log.info("VATSIM transceivers not fetched: %s", exc)
             transceivers = None
-        return parse_vatsim(data or {}, transceivers)
+        return parse_vatsim(data, transceivers), parse_vatsim_pilots(data)
     if network == "ivao":
-        return parse_ivao(getter(IVAO_WHAZZUP) or {})
+        data = getter(IVAO_WHAZZUP) or {}
+        return parse_ivao(data), parse_ivao_pilots(data)
     raise ValueError(f"no such network: {network}")
+
+
+def fetch(network: str, getter: Callable[[str], Any] = http_json) -> list[OnlineController]:
+    """The network's controllers now (blocking)."""
+    return fetch_all(network, getter)[0]
 
 
 class OnlineStore:
     """The last list of a network's controllers, fetched again in the background each minute."""
 
-    def __init__(self, network: str, *, fetcher: Callable[[str], list[OnlineController]] = fetch,
+    def __init__(self, network: str, *, fetcher: Callable[[str], Any] = fetch_all,
                  background: bool = True, clock: Callable[[], float] = time.monotonic) -> None:
         self.network = network
         self.fetcher = fetcher
@@ -117,6 +161,7 @@ class OnlineStore:
         self.clock = clock
         self.refresh_s = REFRESH_S
         self._held: tuple[OnlineController, ...] | None = None
+        self.pilots: tuple[dict, ...] = ()  # the network's pilots, last fetched (for the Live Map)
         self._got: float | None = None
         self._failed: float | None = None
         self.error = ""
@@ -139,9 +184,19 @@ class OnlineStore:
         with self._lock:
             return self._held, self.error
 
+    def pilots_near(self, lat: float, lon: float, nm: float) -> list[dict]:
+        """The network's pilots within ``nm`` of a place (the Live Map's view of them)."""
+        from localtc.sim_api.geo import haversine_nm
+
+        return [p for p in self.pilots if haversine_nm(lat, lon, p["lat"], p["lon"]) <= nm]
+
     def _load(self) -> None:
         try:
-            found = tuple(self.fetcher(self.network))
+            got = self.fetcher(self.network)
+            pilots: tuple[dict, ...] | None = None
+            if isinstance(got, tuple) and len(got) == 2 and isinstance(got[1], list | tuple):
+                got, pilots = got[0], tuple(got[1])
+            found = tuple(got)
         except Exception as exc:  # noqa: BLE001 - offline, or the network's feed down: the last list stands
             log.info("%s controllers not fetched: %s", self.network, exc)
             with self._lock:
@@ -149,4 +204,6 @@ class OnlineStore:
             return
         with self._lock:
             self._held, self._got, self._failed, self.error, self._fetching = found, self.clock(), None, "", False
+            if pilots is not None:
+                self.pilots = pilots
         log.info("%s: %d controllers online", self.network, len(found))
