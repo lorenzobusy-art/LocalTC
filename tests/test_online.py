@@ -508,3 +508,12 @@ def test_released_by_an_online_controller_they_arent_proposed_again_inside_their
     gone = msgspec.structs.replace(own, t=30, lat=LAT + 1, com1_mhz=122.8)  # out of their airspace ...
     engine.handle(gone)
     assert "KPAE_GND" not in engine._online_released
+
+
+def test_an_approach_without_an_outline_works_its_own_fir_not_the_next_countrys_airports():
+    zurich = ctl("LSZH_APP", 135.23, lat=47.486, lon=8.793)
+    zurich = msgspec.structs.replace(zurich, range_nm=online_atc.range_of("APP", 150))  # VATSIM's "visual range"
+    assert online_atc.area_of(zurich) is None and zurich.range_nm == 60.0  # the scope's reach is no airspace
+    linate = online_atc.point(45.445, 9.277, ground=True, alt_ft=350, agl_ft=0)
+    kloten = online_atc.point(47.458, 8.548, ground=True, alt_ft=1400, agl_ft=0)
+    assert online_atc.covers(zurich, kloten) and not online_atc.covers(zurich, linate)

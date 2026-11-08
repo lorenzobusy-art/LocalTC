@@ -33,8 +33,10 @@ from localtc.sim_api.geo import haversine_nm as distance_nm
 NETWORKS = {"vatsim": "VATSIM", "ivao": "IVAO"}
 
 # The range each kind of position gets where the network gives none, and the most it's held to where it does.
-DEFAULT_RANGE_NM = {"DEL": 10.0, "GND": 10.0, "TWR": 30.0, "APP": 80.0, "CTR": 300.0, "FSS": 600.0, "ATIS": 60.0}
-MAX_RANGE_NM = {"DEL": 15.0, "GND": 15.0, "TWR": 40.0, "APP": 150.0, "CTR": 1000.0, "FSS": 1500.0, "ATIS": 100.0}
+DEFAULT_RANGE_NM = {"DEL": 10.0, "GND": 10.0, "TWR": 30.0, "APP": 40.0, "CTR": 300.0, "FSS": 600.0, "ATIS": 60.0}
+# (A network's "visual range" is how far its controller's scope shows traffic, not their airspace: Zurich's approach
+# says 150 nm, which reached Milan.)
+MAX_RANGE_NM = {"DEL": 15.0, "GND": 15.0, "TWR": 40.0, "APP": 60.0, "CTR": 1000.0, "FSS": 1500.0, "ATIS": 100.0}
 # (An ATIS is never the one to call, but COM1 on it is listening to the network: LocalTC stays quiet.)
 AREA_KINDS = {"CTR": "center", "FSS": "center", "APP": "approach"}  # the positions that work an outline
 PYRAMID = ("DEL", "GND", "TWR", "APP", "CTR", "FSS")  # bottom to top: each works the ones below it nobody's on
@@ -141,7 +143,16 @@ def covers(c: OnlineController, own: OwnshipState) -> bool:
     area = area_of(c)
     if area is not None:
         return _inside(area, own)
-    return distance_nm(own.lat, own.lon, c.lat, c.lon) <= c.range_nm
+    if distance_nm(own.lat, own.lon, c.lat, c.lon) > c.range_nm:
+        return False
+    # No outline: a circle, and never across into another FIR (Zurich's approach doesn't work Milan's airports).
+    return c.kind != "APP" or _same_fir(airport_of(c), (own.lat, own.lon))
+
+
+def _same_fir(a: tuple[float, float], b: tuple[float, float]) -> bool:
+    sky = Airspace.load()
+    first, second = sky.center_at(*a), sky.center_at(*b)
+    return first is None or second is None or first.id == second.id
 
 
 def works(c: OnlineController, needed: str, own: OwnshipState) -> bool:

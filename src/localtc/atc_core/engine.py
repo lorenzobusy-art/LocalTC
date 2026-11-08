@@ -1624,7 +1624,13 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
             if arriving:
                 ordered = [ordered[3], ordered[2], ordered[1]]  # the way in: approach, tower, ground
             for name, needed, controllers, where in ordered:
-                row(f"{geo.icao} {name}", part, needed, local_at(geo, *controllers), where)
+                local = local_at(geo, *controllers)
+                if local is None and needed == "APP" and (area := self.airspace.center_at(a.lat, a.lon)) is not None:
+                    # No approach of its own in the sim's data (Linate): the centre works its arrivals and departures.
+                    nearby = [g.airport for g in self.tracker.context_builder.airports.values()
+                              if g.distance_nm(a.lat, a.lon) < SECTOR_NEAREST_NM]
+                    local = area_center(area.name, nearby, None, taken)
+                row(f"{geo.icao} {name}", part, needed, local, where)
 
         origin, dest = self.geometry(st.flight.origin), self.geometry(st.flight.destination)
         if origin is not None:
