@@ -425,3 +425,41 @@ def test_the_copilot_says_once_where_to_go_off_the_network():
     out += pm.observe(AtcAlert(t=1.0, kind="joined", detail="Joined in flight"))
     out += [o for t in range(2, 14) for o in pm.observe(own(float(t)))]
     assert said(out) == ["We're out of VATSIM coverage. LocalTC's Milano Radar, 135.225."]
+
+
+# --- LocalTC's controllers hand over to the network; released by it, the airspace after theirs ------------------
+
+
+def test_localtcs_controller_hands_the_flight_to_the_network_when_its_airspace_goes_online():
+    engine, own = parked_engine(online_network="vatsim")  # on Paine Clearance (LocalTC's), 127.25
+    engine.handle(OnlineAtc(t=1, network="vatsim", controllers=(ctl("KPAE_DEL", 128.0),)))
+    outputs = engine.handle(msgspec.structs.replace(own, t=2))
+    outputs += [o for s in range(3, 8) for o in engine.handle(msgspec.structs.replace(own, t=s))]
+    (contact,) = transmissions(outputs)
+    assert "on VATSIM 128" in contact.text and contact.instruction_id == "common.contact"
+
+
+def test_a_handoff_to_an_airspace_the_network_works_goes_to_their_frequency():
+    from localtc.atc_core.facilities import Facility
+
+    engine, own = parked_engine(online_network="ivao")
+    engine.handle(OnlineAtc(t=1, network="ivao", controllers=(ctl("ZSE_CTR", 124.2, lat=44.0, lon=-121.0, kind="CTR"),)))
+    centre = Facility("center", "Seattle Center", 135.05)
+    engine._schedule(5.0, "common.contact", {"station": centre.station, "frequency": centre.mhz},
+                     engine.facilities[0], handoff_to=centre)
+    item = engine._scheduled[-1]
+    assert item.slots == {"station": "Seattle Center on IVAO", "frequency": 124.2}
+    assert item.handoff_to.mhz == 124.2
+
+
+def test_released_by_the_networks_approach_the_pilot_goes_to_the_airspace_after_theirs():
+    from helpers.airports import kbfi
+
+    from localtc.sim_api import AirportData
+
+    engine, own = parked_engine(destination="KBFI", cruise_ft=32000, online_network="vatsim")
+    engine.handle(AirportData(t=0, airport=kbfi()))
+    approach = ctl("SEA_APP", 119.2, lat=47.45, lon=-122.31)
+    engine.handle(OnlineAtc(t=1, network="vatsim", controllers=(approach,)))
+    after = engine._after_online(approach)
+    assert after.controller == "center" and after.station == "Seattle Center"  # not Seattle Departure (theirs)
