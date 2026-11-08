@@ -2532,6 +2532,7 @@ const Settings = {
       <div class="row"><span>LocalTC <b>${esc(u.current)}</b></span>
         <button class="btn small" id="u-check" ${busy ? "disabled" : ""}>${u.state === "checking" ? "Checking ..." : "Check now"}</button> ${action}</div>
       ${u.message ? `<p class="small ${u.state === "failed" ? "error" : "muted"}">${esc(u.message)}</p>` : ""}
+      ${u.repo ? `<p class="small wbox wwarn">This version (VATSIM/IVAO hybrid) follows only the updates of ${esc(u.repo)}. To go back to the official LocalTC, reinstall it.</p>` : ""}
       ${r && !u.can_apply && u.why_not ? `<p class="muted small">${esc(u.why_not)}</p>` : ""}
       ${r ? `<details class="small"><summary>What's new in ${esc(r.version)}</summary><pre class="notes">${esc(r.notes || "No notes.")}</pre>
         ${r.page ? `<a href="${esc(r.page)}" target="_blank" rel="noopener">The release on GitHub</a>` : ""}</details>` : ""}

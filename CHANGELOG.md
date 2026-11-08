@@ -7,6 +7,9 @@ a new minor version adds features, a patch fixes them.
 ## [0.5.6] - Upcoming
 
 ### Added
+- **This build updates from its own fork:** LocalTC with the VATSIM / IVAO hybrid mode looks for updates only in
+  github.com/lorenzobusy-art/LocalTC (releases tagged online-atc-N), so an official release never replaces it unasked
+  (nor fails to start on its settings). Settings → Updates says so; to go back to the official LocalTC, reinstall it.
 - **VATSIM/IVAO controller integration:** turn it on in Quick Settings → ATC, and the ATC tab asks before each flight
   whether it's flown with Only LocalTC, VATSIM hybrid (+ LocalTC) or IVAO hybrid (+ LocalTC), with the rule explained beside it (Start waits for the choice). With a network, its controllers around
   the route are looked up each minute from its public data feed. Their sectors are LocalTC's own: a centre works its FIR

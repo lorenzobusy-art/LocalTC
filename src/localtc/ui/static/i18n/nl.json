@@ -1566,5 +1566,6 @@
 "With {0}: LocalTC's ATC is quiet.": "Met {0}: de ATC van LocalTC zwijgt.",
 "{0} hybrid from now": "Vanaf nu {0} hybride",
 "{0} not reached: {1}": "{0} niet bereikt: {1}",
-"{0}: its controllers are looked up once the flight starts.": "{0}: de verkeersleiders worden opgezocht zodra de vlucht start."
+"{0}: its controllers are looked up once the flight starts.": "{0}: de verkeersleiders worden opgezocht zodra de vlucht start.",
+"This version (VATSIM/IVAO hybrid) follows only the updates of {0}. To go back to the official LocalTC, reinstall it.": "Deze versie (VATSIM/IVAO hybride) volgt alleen de updates van {0}. Installeer de officiële LocalTC opnieuw om ernaar terug te gaan."
 }

@@ -55,7 +55,7 @@ class FakeGitHub:
 def test_a_newer_release_is_found_and_asked_for_once_a_day(tmp_path):
     github = FakeGitHub()
     cache = tmp_path / "latest.json"
-    found = update.check(fetch=github, cache=cache, now=1000.0)
+    found = update.check(fetch=github, cache=cache, now=1000.0, current="0.5.5")  # (an official build's check)
     assert found is not None and found.version == "9.0.0"
     update.check(fetch=github, cache=cache, now=1000.0 + 3600)
     assert len(github.calls) == 1
@@ -191,3 +191,28 @@ def test_the_release_notes_tell_the_versions_before_a_broken_updater_what_to_do(
     out = capsys.readouterr().out
     assert "releases/download/v0.5.5/LocalTC-Setup.exe" in out and "don't press" in out
     assert "don't press" not in update.changelog_section((root / "CHANGELOG.md").read_text(encoding="utf-8"), "0.5.5")
+
+
+class FakeFork(FakeGitHub):
+    """The fork's release list: online-atc-N tags (pre-releases too), and an official-looking one among them."""
+
+    def __init__(self, numbers: tuple[int, ...]) -> None:
+        super().__init__("9.0.0")
+        self.releases = [{"tag_name": f"online-atc-{n}", "body": "", "html_url": f"https://example/{n}",
+                          "prerelease": True,
+                          "assets": [{"name": f"LocalTC-online-atc-{n}.zip", "browser_download_url": "zip"},
+                                     {"name": "SHA256SUMS", "browser_download_url": "sums"}]} for n in numbers]
+        self.releases.append(self.release)  # v9.0.0: never this build's update
+
+    def __call__(self, url: str) -> bytes:
+        self.calls.append(url)
+        return {"zip": self.zip, "sums": self.sums}.get(url) or json.dumps(self.releases).encode()
+
+
+def test_this_build_follows_only_its_forks_releases(tmp_path):
+    assert update.REPO == "lorenzobusy-art/LocalTC" and update.CURRENT.startswith("online-atc-")
+    current = int(update.CURRENT.rsplit("-", 1)[1])
+    found = update.check(fetch=FakeFork((current - 1, current + 1)), cache=tmp_path / "a.json", now=0.0)
+    assert found is not None and found.version == f"online-atc-{current + 1}"
+    assert update.check(fetch=FakeFork((current,)), cache=tmp_path / "b.json", now=0.0) is None  # official 9.0.0 isn't
+    assert not update.is_newer("9.0.0") and update.is_newer(f"online-atc-{current + 1}")

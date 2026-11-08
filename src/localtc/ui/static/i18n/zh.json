@@ -1566,5 +1566,6 @@
 "With {0}: LocalTC's ATC is quiet.": "与 {0}：LocalTC 的 ATC 保持安静。",
 "{0} hybrid from now": "从现在起 {0} 混合",
 "{0} not reached: {1}": "{0} 无法连接：{1}",
-"{0}: its controllers are looked up once the flight starts.": "{0}：飞行开始后即查找其管制员。"
+"{0}: its controllers are looked up once the flight starts.": "{0}：飞行开始后即查找其管制员。",
+"This version (VATSIM/IVAO hybrid) follows only the updates of {0}. To go back to the official LocalTC, reinstall it.": "此版本（VATSIM/IVAO 混合）只接收 {0} 的更新。要回到官方 LocalTC，请重新安装。"
 }

@@ -1151,6 +1151,7 @@
 "This flight's last answer came from",
 "This is a git checkout: update it with git pull (or GitHub Desktop).",
 "This replay is from a newer LocalTC: update to play it.",
+"This version (VATSIM/IVAO hybrid) follows only the updates of {0}. To go back to the official LocalTC, reinstall it.",
 "Three flights in: want an account?",
 "Through Settings → Support & feedback, or on the Discord.",
 "Time in the flight",

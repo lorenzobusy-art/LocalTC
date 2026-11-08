@@ -1566,5 +1566,6 @@
 "With {0}: LocalTC's ATC is quiet.": "Com {0}: o ATC do LocalTC está em silêncio.",
 "{0} hybrid from now": "{0} híbrido a partir de agora",
 "{0} not reached: {1}": "{0} não alcançado: {1}",
-"{0}: its controllers are looked up once the flight starts.": "{0}: os seus controladores são procurados assim que o voo começa."
+"{0}: its controllers are looked up once the flight starts.": "{0}: os seus controladores são procurados assim que o voo começa.",
+"This version (VATSIM/IVAO hybrid) follows only the updates of {0}. To go back to the official LocalTC, reinstall it.": "Esta versão (VATSIM/IVAO híbrida) segue apenas as atualizações de {0}. Para voltar ao LocalTC oficial, reinstale-o."
 }

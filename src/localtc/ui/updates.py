@@ -32,7 +32,8 @@ class Updates:
 
     def view(self) -> dict:
         ok, why = update.can_apply()
-        return {"current": __version__, "state": self.state, "message": self.message, "mode": self.mode(),
+        return {"current": f"{__version__} ({update.CURRENT})", "repo": update.REPO,
+                "state": self.state, "message": self.message, "mode": self.mode(),
                 "release": asdict(self.release) if self.release else None, "can_apply": ok, "why_not": why}
 
     def _set(self, state: str, message: str = "") -> None:
@@ -47,9 +48,9 @@ class Updates:
         self._set("checking")
         self.release = await asyncio.to_thread(update.check, force=force)
         if self.release is None:
-            self._set("current", f"LocalTC {__version__} is the latest version.")
+            self._set("current", f"LocalTC {update.CURRENT} is the latest version of this build.")
         else:
-            self._set("available", f"LocalTC {self.release.version} is out (you have {__version__}).")
+            self._set("available", f"LocalTC {self.release.version} is out (you have {update.CURRENT}).")
             if self.mode() == "auto" and update.can_apply()[0]:
                 await self.download()
         return self.view()

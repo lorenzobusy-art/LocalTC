@@ -26,13 +26,17 @@ from collections.abc import Callable
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
-from localtc import __version__
+from localtc import MOD_REPO, MOD_VERSION, __version__
 from localtc.config import data_dir
 
 log = logging.getLogger(__name__)
 
-REPO = "duckiest428/LocalTC"
-LATEST_URL = f"https://api.github.com/repos/{REPO}/releases/latest"
+# This build follows its own fork, not duckiest428/LocalTC: an official release would replace the hybrid mode (and
+# could not start on its settings). Its releases are tagged online-atc-N, pre-releases included.
+REPO = MOD_REPO
+LATEST_URL = f"https://api.github.com/repos/{REPO}/releases?per_page=30"
+CURRENT = MOD_VERSION
+_MOD = re.compile(r"^online-atc-(\d+)$")
 CHECK_EVERY_S = 24 * 3600
 # Never touched by an update: the Python environment and the Python it runs on (the setup's runtime\), the pilot's
 # recordings, the SDK's DLL if it was copied in, the launcher the installer wrote, and the uninstaller.
@@ -51,7 +55,10 @@ def parse_version(text: str) -> tuple:
     return int(major), int(minor), int(patch), (0, pre) if pre else (1,)
 
 
-def is_newer(candidate: str, current: str = __version__) -> bool:
+def is_newer(candidate: str, current: str = CURRENT) -> bool:
+    mod, installed = _MOD.match(candidate.strip()), _MOD.match(current.strip())
+    if mod or installed:  # this build's releases: online-atc-3 after online-atc-2 (never an official version)
+        return bool(mod and installed) and int(mod.group(1)) > int(installed.group(1))
     try:
         return parse_version(candidate) > parse_version(current)
     except ValueError:
@@ -71,15 +78,26 @@ class Release:
 def parse_release(data: dict) -> Release | None:
     """A GitHub API release, if it has what an update needs."""
     tag = str(data.get("tag_name", ""))
-    if data.get("draft") or not _VERSION.match(tag):
+    if data.get("draft") or not (_VERSION.match(tag) or _MOD.match(tag)):
         return None
-    version = tag.lstrip("vV")  # ("V0.5.0", as a release on GitHub may be tagged)
+    version = tag if _MOD.match(tag) else tag.lstrip("vV")  # ("V0.5.0", as a release on GitHub may be tagged)
     assets = {a.get("name"): a.get("browser_download_url") for a in data.get("assets", [])}
     zip_url, sums_url = assets.get(f"LocalTC-{version}.zip"), assets.get("SHA256SUMS")
     if not zip_url or not sums_url:
         return None
     return Release(version=version, notes=str(data.get("body") or ""), page=str(data.get("html_url") or ""),
                    zip_url=zip_url, sums_url=sums_url, published=str(data.get("published_at") or ""))
+
+
+def _order(version: str) -> tuple:
+    """Newest first by: this build's release number, else the version."""
+    mod = _MOD.match(version)
+    if mod:
+        return 1, int(mod.group(1))
+    try:
+        return 0, parse_version(version)
+    except ValueError:
+        return -1, ()
 
 
 def _fetch(url: str, timeout_s: float = 10.0) -> bytes:
@@ -94,7 +112,7 @@ def updates_dir() -> Path:
 
 
 def check(*, force: bool = False, fetch: Callable[[str], bytes] = _fetch, cache: Path | None = None,
-          now: float | None = None, current: str = __version__) -> Release | None:
+          now: float | None = None, current: str = CURRENT) -> Release | None:
     """The latest release if it is newer than this one. Asks GitHub at most once a day (``force`` asks now);
     offline or rate-limited, it answers from the last check, or None."""
     cache = cache or updates_dir() / "latest.json"
@@ -107,7 +125,12 @@ def check(*, force: bool = False, fetch: Callable[[str], bytes] = _fetch, cache:
     release_data = cached.get("release")
     if force or now - float(cached.get("checked_at", "-inf")) >= CHECK_EVERY_S:
         try:
-            release = parse_release(json.loads(fetch(LATEST_URL)))
+            answer = json.loads(fetch(LATEST_URL))
+            if isinstance(answer, list):  # the fork's releases: its newest that an update can use
+                found = [r for r in (parse_release(d) for d in answer) if r is not None]
+                release = max(found, key=lambda r: _order(r.version), default=None)
+            else:
+                release = parse_release(answer)
             release_data = asdict(release) if release is not None else None
             cache.parent.mkdir(parents=True, exist_ok=True)
             cache.write_text(json.dumps({"checked_at": now, "release": release_data}), encoding="utf-8")
