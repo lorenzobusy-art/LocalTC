@@ -106,6 +106,17 @@ a new minor version adds features, a patch fixes them.
   instead of ATC's "say again".
 
 ### Fixed
+- **A crossing restriction is said again as one:** a readback of "cross NORNI at 8,000 feet" that missed the fix got
+  "cross NORNI at 8,000 feet" again, not "negative, I say again, direct NORNI" (a clearance the flight wasn't
+  given); and a fix heard with an article or as it sounds ("cross a normie" for NORNI) is the fix given.
+- **No crossing restriction behind a direct:** after "proceed direct JESSY" the descent's crossing fix is never one the
+  direct skipped ("cross NORNI at 8,000" with NORNI before JESSY on the route).
+- **A descent at pilot's discretion isn't nagged:** level above a "when ready" or "cross ... at pilot's discretion"
+  descent, the copilot no longer says "We're cleared to FL080, still level at FL170".
+- **Speed readbacks:** the speed given said back bare ("180", "and then 180 until final") is read back, and "maintain
+  160 knots until five mile final" is never said again at five miles or after another speed was given.
+- **Taxi readbacks:** a route typed together ("dgo" for D, G, O), a name said twice in a row ("D, G, O, O") and a
+  callsign said as its letters at the end ("..., Victor November Delta") are read back right.
 - **A callsign no airline list knows is heard:** a virtual airline's "VND1128" said "Victor November Delta 1128", or
   typed "VND1128" / "vnd 1128", is the pilot's own. It was taken for another flight (or no callsign at all), and ATC
   asked "say again your callsign" after almost every call.

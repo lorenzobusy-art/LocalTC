@@ -310,7 +310,22 @@ def speeds(tokens: list[Token], expected: Any = None) -> list[int]:
         near = [tok.text for tok in tokens[max(0, i - 3) : i + 3]]
         if any(word[0] in near for word in SPEED_WORDS) and value not in found:
             found.append(value)
+        elif value == _int(expected) and value not in found and not set(near) & NOT_A_SPEED:
+            # The speed given, said back bare: "180", "and then 180 until final" (no "knots" or "speed" with it).
+            found.append(value)
     return found
+
+
+# Words that make a number something other than a speed: "heading 180", "180 feet", "runway 18".
+NOT_A_SPEED = {"heading", "feet", "ft", "level", "runway", "squawk", "degrees", "point", "decimal", "frequency",
+               "flight", "altitude", "miles", "mile", "nm"}
+
+
+def _int(value: Any) -> int | None:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
 
 
 def headings(tokens: list[Token], expected: Any = None) -> list[int]:
@@ -355,6 +370,10 @@ def taxi_routes(tokens: list[Token], expected: Any = None) -> list[tuple[str, ..
             i += 1
         if len(route) >= 2:
             found.append(tuple(route))
+    if not found and expected and len(expected) >= 2 and all(len(str(n)) == 1 for n in expected):
+        joined = "".join(str(n) for n in expected).lower()
+        if any(t.kind == "word" and t.text.lower() == joined for t in tokens):
+            found.append(tuple(str(n).upper() for n in expected))  # "dgo" typed for D, G, O
     return found
 
 
@@ -504,6 +523,8 @@ def taxi_route_matches(heard: Any, expected: Any) -> bool:
     """
     said = [str(n).upper().replace(" ", "") for n in heard]
     want = [str(n).upper().replace(" ", "") for n in expected]  # "LINK 54" said is LINK54
+    if not any(a == b for a, b in zip(want, want[1:])):
+        said = [n for k, n in enumerate(said) if k == 0 or n != said[k - 1]]  # "D, G, O, O": a slip, one O
     if said == want:
         return True
     # Leniency for speech-to-text on a long route: "Alpha November" heard as "off of November", a taxiway
@@ -668,6 +689,9 @@ def _flight_number_end(tokens: list[Token], start: int, number: str) -> int | No
     return None
 
 
+AIRLINE_IDENT = re.compile(r"([A-Z]{3})(\d{1,4}[A-Z]{0,2})")  # VND1128: three letters then the flight number
+
+
 def without_callsign(tokens: list[Token], callsign: Callsign | None) -> list[Token]:
     """The tokens with the callsign taken out, so its letters can't be read as taxiways
     ("taxi via alpha four, delta papa six niner" is route A4 from DP69, not A4, D, P69)."""
@@ -684,9 +708,17 @@ def without_callsign(tokens: list[Token], callsign: Callsign | None) -> list[Tok
                 # (All of it: "via V, D, A, Emirates ninety-eight papa" left "98 P", read as taxiways A98 and P.)
                 end = _flight_number_end(tokens, end, callsign.flight_number) or end
                 return tokens[:i] + tokens[end:]
-        return tokens
+        if not AIRLINE_IDENT.fullmatch(callsign.ident):
+            return tokens
     ident = callsign.ident.lower().replace("-", "")
     forms = {ident, callsign.suffix.lower()} | ({ident[1:]} if len(ident) > 4 else set())
+    if (prefix := AIRLINE_IDENT.fullmatch(callsign.ident)) is not None:
+        # A flight callsign no airline list knows (VND1128) said as its letters ("Victor November Delta"), last in
+        # the call: the callsign, not taxiways V, N, D after the route.
+        letters = prefix.group(1).lower()
+        if len(tokens) >= len(letters) and "".join(t.text for t in tokens[-len(letters):]) == letters \
+                and all(t.kind == "letter" for t in tokens[-len(letters):]):
+            tokens = tokens[: -len(letters)]
     best: tuple[int, int] | None = None  # the longest span that spells the callsign; the last one on a tie
     for first in range(len(tokens)):
         if tokens[first].kind not in ("letter", "number") and len(tokens[first].text) > 2:
@@ -745,12 +777,17 @@ def fixes(tokens: list[Token], expected: Any = None) -> list[str]:
             # together, as many as make the name. (The callsign's "Delta" after it was the letter D: "EBAKED", and
             # "negative, direct EBAKE" three times.)
             joined, said = "", False
-            for w in [w for w in words[i : i + 9] if w not in ("to", "the")]:
+            after = [w for w in words[i : i + 9] if w not in ("to", "the")]
+            if after[:1] in (["a"], ["an"]) and not expected.upper().startswith("A"):
+                after = after[1:]  # "cross a normie": the article speech-to-text put in front of the name
+            for w in after:
                 joined += w.upper()
                 if not w.isalpha() or len(joined) > len(expected) + 1:
                     break
                 if joined[:1] == expected[:1].upper() and abs(len(joined) - len(expected)) <= 1 \
-                        and difflib.SequenceMatcher(None, joined, expected.upper()).ratio() >= FIX_LIKENESS:
+                        and max(difflib.SequenceMatcher(None, joined, expected.upper()).ratio(),
+                                difflib.SequenceMatcher(None, _as_heard(joined), _as_heard(expected)).ratio()) \
+                        >= FIX_LIKENESS:
                     said = True
                     break
             if said:
@@ -951,6 +988,11 @@ def values_equal(element: str, heard: Any, expected: Any) -> bool:
     if element == "procedure":
         return procedure_matches(str(heard), str(expected))
     return heard == expected
+
+
+def _as_heard(name: str) -> str:
+    """A fix's name as it sounds at the end: "normie", "norny" and NORNI all end in the same "ee"."""
+    return re.sub(r"(?:IE|EE|EY|Y)$", "I", name.upper())
 
 
 def fix_matches(heard: str, expected: str) -> bool:

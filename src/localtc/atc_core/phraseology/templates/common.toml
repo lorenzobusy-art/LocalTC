@@ -219,6 +219,8 @@ text = ["{callsign}, clearance on request, stand by.", "{callsign}, stand by for
 
 [fragments]
 hold_fix = "hold at {fix}"
+cross_fix = "cross {fix}"
+cross_fix_altitude = "cross {fix} at {altitude}"
 altitude = "maintain {altitude}"
 cruise = "expect {cruise}"
 frequency = "frequency {frequency}"

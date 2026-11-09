@@ -99,8 +99,8 @@ from localtc.atc_core.atis.observation import from_report
 from localtc.atc_core.atis.real import with_magvar
 from localtc.atc_core.atis.operations import Notice
 from localtc.atc_core.vfr import VfrMixin, VfrState
-from localtc.atc_core.conditions import BEHIND_LANDING_NM, CROSS_HOLD_NM, EXPEDITE_NM, NO_DELAY_NM, ConditionBook, \
-    ConditionsMixin
+from localtc.atc_core.conditions import BEHIND_LANDING_NM, CROSS_HOLD_NM, EXPEDITE_NM, NO_DELAY_NM, SPEED_UNTIL_NM, \
+    ConditionBook, ConditionsMixin
 from localtc.atc_core.holding import HoldsMixin
 from localtc.atc_core.gate_requests import GateRequestsMixin
 from localtc.atc_core.routing import RoutingMixin, hazards_from
@@ -673,6 +673,10 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
         self.hazards = []  # active SIGMETs, TFRs and restricted areas (``OpsSnapshot`` "hazards"; atc_core/routing.py)
         self.amendments = []  # shortcuts, deviations and reroutes given
         self._shortcut_t = -math.inf
+        self._direct_fix: str | None = None  # the fix last given direct: the route before it is skipped
+        # The level of a descent at pilot's discretion ("when ready descend to 8,000"): the crew starts down when they
+        # choose, so staying level above it is no deviation. None once another level is given.
+        self.discretion_alt: int | None = None
         self._hazards_told: set[str] = set()
         self._ops_changed = False  # something in ``operations_json`` changed: an ``AtcOperations`` goes out
         self._conditions_changed = False
@@ -2632,6 +2636,9 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
             # around" to an A380 touching down; the rollout's end, where it's dropped anyway, was 28 seconds on)
             st.pending = None
             return []
+        if pending is not None and self._overtaken(pending.instruction_id):
+            st.pending = None  # "maintain 160 knots until five mile final" said again at four miles: nothing to it now
+            return []
         if pending is not None and last_pilot < pending.issued_t and t - last_atc >= SILENT_PILOT_S \
                 and pending.required:
             # (Nothing required, as "readback correct, contact ground when ready": no "did you copy?" for it.)
@@ -3960,16 +3967,30 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
             optional=(), confirming=interp.status == "unclear",
         )
         if interp.status == "unclear":  # probably right, misheard: "confirm frequency 120.1"
-            self._schedule(t, "common.confirm", {"correction": self._fragments(list(interp.unclear), slots)}, facility,
-                           expects_readback=False)
+            self._schedule(t, "common.confirm",
+                           {"correction": self._fragments(_said_again(interp.unclear, pending.instruction_id), slots)},
+                           facility, expects_readback=False)
         elif interp.status == "incorrect":
-            correction = self._fragments(list(interp.mismatched), slots)
+            correction = self._fragments(_said_again(interp.mismatched, pending.instruction_id), slots)
             self._schedule(t, "common.negative", {"correction": correction}, facility, expects_readback=False)
         else:
-            missing = ["hold_fix" if e == "fix" and pending.instruction_id == "common.hold" else e for e in interp.missing]
+            missing = _said_again(interp.missing, pending.instruction_id)
             self._schedule(t, "common.read_back", {"missing": self._fragments(missing, slots)}, facility,
                            expects_readback=False)
         return out
+
+    def _overtaken(self, instruction_id: str) -> bool:
+        """An instruction past saying again: a speed to keep "until five mile final" with the flight at it, or
+        another speed given since (160 after 180)."""
+        if instruction_id not in ("approach.speed", "approach.speed_until"):
+            return False
+        issued = self.state.issued.get(instruction_id)
+        speed = issued.slots.get("speed") if issued is not None else None
+        if speed is not None and self.state.assignments.speed_kt not in (None, int(speed)):
+            return True
+        final = self.tracker.context.final
+        return instruction_id == "approach.speed_until" and final is not None \
+            and final.distance_nm <= SPEED_UNTIL_NM + 0.5
 
     def _give_up_readback(self, facility: Facility, t: float) -> list[BusEvent]:
         """Several tries and still no good readback: say the instruction once more, then stop asking.
@@ -3979,7 +4000,7 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
         assert pending is not None
         st.pending, st.read_back = None, pending  # a late readback is then recognised, not "say again"
         issued = st.issued.get(pending.instruction_id)
-        if issued is not None:
+        if issued is not None and not self._overtaken(pending.instruction_id):
             self._schedule(t, pending.instruction_id, issued.slots, facility, expects_readback=False)
         return [self._alert(t, "readback_unresolved", f"{pending.instruction_id}: no correct readback after "
                                                        f"{MAX_READBACK_ATTEMPTS} tries")]
@@ -6003,10 +6024,12 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
         st.flags.add("descend")
         approach = plan["approach"]
 
-        def assigned(altitude: int, via: bool) -> Callable[[], None]:
+        def assigned(altitude: int, via: bool, discretion: bool = False) -> Callable[[], None]:
             def apply() -> None:
                 self._via_floor = altitude if via else None
                 self._assign(altitude_ft=altitude, approach=approach.display, arrival_runway=approach.landing_runway)
+                if discretion:
+                    self.discretion_alt = altitude  # (after _assign, which clears it)
             return apply
 
         if self.cfg.star:
@@ -6029,14 +6052,14 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
         altitude, instruction = self._arrival_altitude(plan["center_alt"], own, "center")
         if not late and instruction == "center.descend" and (fix := self._crossing_restriction(own, altitude)) is not None:
             self._schedule(t, "center.descend_cross", {"fix": fix, "altitude": altitude, "approach": approach}, facility,
-                           delay=False, on_issue=assigned(altitude, False), note=self._altimeter_note(st.flight.destination))
+                           delay=False, on_issue=assigned(altitude, False, discretion=True), note=self._altimeter_note(st.flight.destination))
             return
         if late:  # already on the way down, or a short hop still climbing: "descend and maintain", or "maintain"
             self._schedule(t, instruction, {"altitude": altitude, "approach": approach}, facility, delay=False,
                            on_issue=assigned(altitude, False), note=self._altimeter_note(st.flight.destination))
             return
         self._schedule(t, "center.descend_pd", {"altitude": altitude, "approach": approach}, facility, delay=False,
-                       on_issue=assigned(altitude, False), note=self._altimeter_note(st.flight.destination))
+                       on_issue=assigned(altitude, False, discretion=True), note=self._altimeter_note(st.flight.destination))
 
     def _star_floor(self) -> int | None:
         """The filed arrival's lowest published altitude (the sim's navdata: its restrictions, "between FL070 and
@@ -6391,6 +6414,8 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
         worded_by: str = "template",
         lead: Phrase | None = None,
     ) -> None:
+        if instruction_id == "common.direct" and slots.get("fix"):
+            self._direct_fix = str(slots["fix"]).upper()  # the route from there on is the flight's now
         if handoff_to is not None and self.cfg.online_network and "frequency" in slots \
                 and (online := self._online_for(handoff_to)) is not None:
             # The next airspace is the network's: "contact Milano Radar 126.750", where they are. The controller says
@@ -7061,6 +7086,8 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
                 # What the destination's ATIS was landing on when it was given (() none: the runway was a guess)
                 info = self.current_atis(self.state.flight.destination)
                 self._arrival_landing = tuple(info.operations.landing) if info is not None and info.operations else ()
+            if key == "altitude_ft":
+                self.discretion_alt = None  # a level given now is to be flown now (a discretion descent sets it after)
             if key == "altitude_ft" and value is not None:
                 # Given again, it's to be reached again: 11,000 reached on the climb, then given as the descent
                 # (at pilot's discretion), had "check altitude" said at the top of the descent.
@@ -7083,6 +7110,22 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
             except Exception:
                 parts.append(Phrase(element.replace("_", " "), element.replace("_", " ")))
         return sum(parts[1:], parts[0]) if parts else Phrase("", "")
+
+
+def _said_again(elements, instruction_id: str) -> list[str]:
+    """What's said again of an instruction, as it was given: a hold's fix is "hold at", a crossing restriction's
+    "cross NORNI at 8,000 feet" (never "direct NORNI", a clearance the flight wasn't given)."""
+    elements = list(elements)
+    if "fix" not in elements:
+        return elements
+    if instruction_id == "common.hold":
+        return ["hold_fix" if e == "fix" else e for e in elements]
+    if instruction_id.endswith("_cross"):
+        if "altitude" in elements:
+            elements.remove("altitude")
+            return ["cross_fix_altitude" if e == "fix" else e for e in elements]
+        return ["cross_fix" if e == "fix" else e for e in elements]
+    return elements
 
 
 def _known_fix(said: str, known: set[str]) -> str | None:

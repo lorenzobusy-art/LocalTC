@@ -389,7 +389,14 @@ class RoutingMixin:
         dest = self.geometry(self.state.flight.destination)
         if dest is None or self.cfg.star:
             return None
-        for ident, lat, lon in reversed(self._route_points()[:-1]):
+        points = self._route_points()[:-1]
+        # After a "proceed direct JESSY", the fixes before JESSY aren't flown: never one of them to cross ("cross
+        # NORNI at 8,000" with NORNI skipped by the direct).
+        direct = self._direct_fix
+        idents = [ident.upper() for ident, _, _ in points]
+        if direct in idents:
+            points = points[idents.index(direct):]
+        for ident, lat, lon in reversed(points):
             d = _nm(lat, lon, dest.airport.lat, dest.airport.lon)
             if CROSS_FROM_NM <= d <= CROSS_TO_NM and _nm(own.lat, own.lon, lat, lon) > 20.0 \
                     and abs(((_bearing(own.lat, own.lon, lat, lon) - own.hdg_true + 540) % 360) - 180) < 90:

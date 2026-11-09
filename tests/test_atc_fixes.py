@@ -172,3 +172,67 @@ def test_the_pilots_words_for_the_callsign_change_in_flight_and_go_back():
     assert speech.callsign(engine.state.flight.callsign) == "Speedbird one two three"
     engine.set_spoken_callsigns({ident: ""})
     assert speech.callsign(engine.state.flight.callsign) == before
+
+
+def test_a_crossing_restriction_said_again_is_a_crossing_never_a_direct():
+    from localtc.atc_core.engine import _said_again
+
+    assert _said_again(["fix", "altitude"], "center.descend_cross") == ["cross_fix_altitude"]
+    assert _said_again(["fix"], "center.descend_cross") == ["cross_fix"]
+    assert _said_again(["fix"], "common.hold") == ["hold_fix"]
+    assert _said_again(["fix"], "common.direct") == ["fix"]
+    engine, own = parked_engine()
+    said = engine._fragments(_said_again(["fix", "altitude"], "center.descend_cross"), {"fix": "NORNI", "altitude": 8000})
+    assert said.display.startswith("cross NORNI at")
+
+
+def test_a_fix_heard_with_an_article_or_as_it_sounds_is_the_fix_given():
+    from localtc.atc_core.readback.extract import fixes
+    from localtc.atc_core.readback.normalize import normalize
+
+    assert fixes(normalize("descend at pilot's discretion and cross a normie at 8,000 feet"), "NORNI") == ["NORNI"]
+    assert fixes(normalize("cross normie at 8000"), "NORNI") == ["NORNI"]
+    assert fixes(normalize("direct a teg"), "ANTEG") == ["ANTEG"]
+    assert fixes(normalize("cross nanny at 8000"), "NORNI") != ["NORNI"]
+
+
+def test_the_speed_given_said_back_bare_is_read_back():
+    from localtc.atc_core.readback.extract import speeds
+    from localtc.atc_core.readback.normalize import normalize
+
+    for said in ("And then 180 until final, Victor November Delta.", "180.", "mantain 180 untin 4 nm final"):
+        assert speeds(normalize(said), 180) == [180], said
+    assert speeds(normalize("heading 180"), 180) == []
+    assert speeds(normalize("180"), None) == []
+
+
+def test_a_speed_until_five_mile_final_is_never_said_again_at_it_or_after_another():
+    engine, own = parked_engine()
+    engine.state.issued["approach.speed_until"] = SimpleNamespace(slots={"speed": 180})
+    engine.state.assignments.speed_kt = 180
+    engine.tracker.context = SimpleNamespace(final=SimpleNamespace(distance_nm=9.0))
+    assert not engine._overtaken("approach.speed_until")
+    engine.tracker.context = SimpleNamespace(final=SimpleNamespace(distance_nm=4.0))
+    assert engine._overtaken("approach.speed_until")
+    engine.tracker.context = SimpleNamespace(final=SimpleNamespace(distance_nm=9.0))
+    engine.state.assignments.speed_kt = 160
+    assert engine._overtaken("approach.speed_until")
+
+
+def test_a_taxi_route_typed_together_or_with_a_name_doubled_is_read_back():
+    from localtc.atc_core.readback.extract import ELEMENTS, taxi_route_matches, without_callsign
+    from localtc.atc_core.readback.normalize import normalize
+    from localtc.atc_core.session import Callsign
+
+    route, ours = ("D", "G", "O"), Callsign.named("VND1128")
+    for said in ("dgo", "Taxi to general aviation via D, G, O, O, hold short 21R, Victor November Delta."):
+        heard = ELEMENTS["taxi_route"](without_callsign(normalize(said), ours), route)
+        assert heard and taxi_route_matches(heard[0], route), said
+    assert not taxi_route_matches(("D", "G", "C"), route)
+
+
+def test_a_descent_at_pilots_discretion_is_marked_until_another_level_is_given():
+    engine, own = parked_engine()
+    engine.discretion_alt = 8000
+    engine._assign(altitude_ft=6000)
+    assert engine.discretion_alt is None

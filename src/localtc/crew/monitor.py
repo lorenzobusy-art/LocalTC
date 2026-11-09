@@ -1021,7 +1021,11 @@ class Monitor(WatchMixin):
             via = self._via()
             # Not on the way up out of the departure, low down: a SID's level-offs ("6,000 at DET") are flown there.
             sid_climb = self.phase == "DEPARTURE" and alt < 10000 and alt < target
+            # Cleared down at pilot's discretion ("when ready descend to 8,000"): level above it until the crew starts
+            # down is the clearance, not a level forgotten ("We're cleared to FL080, still level at FL170").
+            discretion = getattr(self.engine, "discretion_alt", None) == target and alt > target
             if self.captured != target and abs(alt - target) >= 1000 and abs(own.vs_fpm) < 300 and not via and not sid_climb \
+                    and not discretion \
                     and t - self.cleared_alt_t > LEVEL_BELOW_S and t - self.level_t > LEVEL_BELOW_S                     and self.phase in ("DEPARTURE", "CRUISE", "ARRIVAL"):
                 # Cleared to FL370 and still level at 350 an hour later (the selected altitude never reached the
                 # aircraft): the pilot monitoring says so. Level for a while, not a moment's level-off in the climb
