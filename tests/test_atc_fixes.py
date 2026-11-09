@@ -136,3 +136,15 @@ def test_an_emergency_is_cancelled_by_voice_and_never_taken_for_another():
     assert "emergency" in engine.state.flags
     (cancelled,) = transmissions(say(engine, own, 20, "Negative, negative, cancel the emergency, 172LT"))
     assert cancelled.instruction_id == "common.emergency_cancelled" and "emergency" not in engine.state.flags
+
+
+def test_a_callsign_no_airline_list_knows_is_heard_spelled_or_typed():
+    from localtc.atc_core.readback.callsign_check import judge
+    from localtc.atc_core.readback.normalize import normalize
+    from localtc.atc_core.session import Callsign
+
+    ours = Callsign.named("VND1128")  # a virtual airline's: no telephony LocalTC knows
+    for said in ("Genoa Hello, Victor November Delta 1128. Request IFR as filed.", "VND1128", "vnd 1128",
+                 "Copy the wind and caution, cleared for takeoff runway 10, Victor November Delta 1128."):
+        assert judge(normalize(said), ours) == "ours", said
+    assert judge(normalize("Victor November Delta 1123"), ours) == "other"

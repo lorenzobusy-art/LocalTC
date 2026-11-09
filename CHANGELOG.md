@@ -102,6 +102,9 @@ a new minor version adds features, a patch fixes them.
   instead of ATC's "say again".
 
 ### Fixed
+- **A callsign no airline list knows is heard:** a virtual airline's "VND1128" said "Victor November Delta 1128", or
+  typed "VND1128" / "vnd 1128", is the pilot's own. It was taken for another flight (or no callsign at all), and ATC
+  asked "say again your callsign" after almost every call.
 - **An emergency can be cancelled:** "cancel the emergency", "cancel mayday", "no longer an emergency" gets "roger,
   emergency cancelled", and the copilot drops it too (no "squawk 7700?", no diversion offered). It used to be taken for
   another emergency, priority and all (a Mayday speech-to-text had made up in the noise at the end of a call).

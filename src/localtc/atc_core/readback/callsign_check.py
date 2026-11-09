@@ -62,6 +62,8 @@ def _dropped(heard: str, ours: str) -> bool:
 def judge(tokens: list[Token], expected: Callsign | None) -> Verdict:
     """``ours`` (heard, near enough), ``absent`` (no callsign said), ``close`` (one slip away from ours), or
     ``other`` (somebody else's)."""
+    if expected is not None and _spelled(tokens, expected.ident):
+        return "ours"  # its letters and number said or typed as they're written ("Victor November Delta 1128", "VND1128")
     if expected is None or not expected.is_airline:
         return _judge_registration(tokens, expected)
     ours = tuple(expected.telephony.lower().split())
@@ -94,6 +96,25 @@ def judge(tokens: list[Token], expected: Callsign | None) -> Verdict:
                     return "ours"
                 return "close" if _distance(heard, number) <= 1 else "other"
     return verdict
+
+
+def _spelled(tokens: list[Token], ident: str) -> bool:
+    """``ident`` (VND1128, N172LT) said letter by letter and number, or typed together or apart: a callsign no
+    airline list knows (a virtual airline's) is still the pilot's own."""
+    ident = "".join(ch for ch in (ident or "").upper() if ch.isalnum())
+    if len(ident) < 3:
+        return False
+    for i in range(len(tokens)):
+        said = ""
+        for token in tokens[i:]:
+            if token.kind not in ("letter", "number", "word") or (token.kind == "word" and len(token.text) > 4):
+                break
+            said += "".join(ch for ch in token.text.upper() if ch.isalnum())
+            if said == ident:
+                return True
+            if not ident.startswith(said):
+                break
+    return False
 
 
 def _judge_registration(tokens: list[Token], expected: Callsign | None) -> Verdict:
