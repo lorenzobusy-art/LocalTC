@@ -7,6 +7,10 @@ a new minor version adds features, a patch fixes them.
 ## [0.5.6] - Upcoming
 
 ### Added
+- **Your callsign, said your way:** under the callsign on the ATC tab, "Callsign said as" shows how ATC says it, and
+  you can write it as it should be said ("ita arrow 1128" for a virtual airline's VND1128, instead of letters or
+  "eleven twenty-eight"). A number in it is said digit by digit, ATC hears you when you say it so, and it's kept for
+  that callsign (`[atc] spoken_callsigns`). It takes effect from the next call, in flight too; blank goes back to LocalTC's.
 - **This build updates from its own fork:** LocalTC with the VATSIM / IVAO hybrid mode looks for updates only in
   github.com/lorenzobusy-art/LocalTC (releases tagged online-atc-N), so an official release never replaces it unasked
   (nor fails to start on its settings). Settings → Updates says so; to go back to the official LocalTC, reinstall it.

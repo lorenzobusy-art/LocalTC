@@ -49,7 +49,8 @@ def flight_hints(engine: AtcEngine) -> VocabularyHints:
     taxiways = sorted({p.name for p in here.airport.taxi_paths if p.name and p.name.isalnum()}) if here else []
     return VocabularyHints(
         callsign=speech.callsign_display(callsign) if callsign else "",
-        callsign_spoken=(f"{callsign.telephony} {callsign.flight_number}" if callsign and callsign.is_airline
+        callsign_spoken=(callsign.spoken if callsign and callsign.spoken
+                         else f"{callsign.telephony} {callsign.flight_number}" if callsign and callsign.is_airline
                          else spoken_callsign(callsign.ident) if callsign else ""),
         stations=tuple(dict.fromkeys(f.station for f in engine.facilities)),
         airports=tuple(dict.fromkeys(airports)),

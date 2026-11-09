@@ -1567,5 +1567,9 @@
 "{0} hybrid from now": "从现在起 {0} 混合",
 "{0} not reached: {1}": "{0} 无法连接：{1}",
 "{0}: its controllers are looked up once the flight starts.": "{0}：飞行开始后即查找其管制员。",
-"This version (VATSIM/IVAO hybrid) follows only the updates of {0}. To go back to the official LocalTC, reinstall it.": "此版本（VATSIM/IVAO 混合）只接收 {0} 的更新。要回到官方 LocalTC，请重新安装。"
+"This version (VATSIM/IVAO hybrid) follows only the updates of {0}. To go back to the official LocalTC, reinstall it.": "此版本（VATSIM/IVAO 混合）只接收 {0} 的更新。要回到官方 LocalTC，请重新安装。",
+"ATC will say \"{0}\"": "ATC 将说“{0}”",
+"ATC will say the callsign its own way": "ATC 将按自己的方式读呼号",
+"Callsign said as": "呼号读作",
+"Write it as ATC should say it, e.g. \"ita arrow 1128\": a number in it is said digit by digit, and ATC hears you say it so. Blank: LocalTC's.": "按 ATC 应读的方式填写，例如“ita arrow 1128”：数字逐位读出，你这样说时 ATC 也能听懂。留空：使用 LocalTC 的读法。"
 }

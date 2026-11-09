@@ -178,6 +178,8 @@ class AtcConfig(_Section):
     # LocalTC's ATC is quiet while COM1 is on one of theirs; it takes the flight back where none is.
     online_integration: bool = False
     online_network: Literal["", "local", "vatsim", "ivao"] = ""
+    # How ATC says (and hears) a callsign, by its ident, written by the pilot on the ATC tab: {"VND1128": "ita arrow 1128"}.
+    spoken_callsigns: dict[str, str] = {}
     callsign_check: bool = True  # another aircraft's callsign heard (or one digit off on a new call): "say again your callsign"
     # Each station a controller with a manner of their own (calm, formal, friendly, strict, hurried, dry, conversational):
     # their greetings, acknowledgements, corrections and pace, and how the language model words their replies. The

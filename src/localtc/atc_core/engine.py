@@ -477,6 +477,8 @@ class EngineConfig:
     destination: str | None = None
     cruise_ft: int | None = None
     callsign: str | None = None  # overrides the sim's ATC ID
+    # How the pilot wants a callsign said and heard, by its ident: {"VND1128": "ita arrow 1128"} ([atc] spoken_callsigns).
+    spoken_callsigns: dict[str, str] = field(default_factory=dict)
     rules: str = "IFR"
     center_name: str = "Seattle"
     center_mhz: float = 125.1
@@ -560,7 +562,7 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
         flight.destination = self.cfg.destination.upper() if self.cfg.destination else None
         flight.cruise_ft = self.cfg.cruise_ft
         if self.cfg.callsign:
-            flight.callsign = Callsign.named(self.cfg.callsign)
+            flight.callsign = self._own(Callsign.named(self.cfg.callsign))
         self.tracker = PhaseTracker(destination=flight.destination, cruise_ft=flight.cruise_ft, thresholds=self.cfg.thresholds)
         if self.cfg.airport_fixes:  # the pilot's own corrections to the sim's airport data
             self.tracker.context_builder.fixes = airport_fixes.load(self.cfg.airport_fixes)
@@ -747,6 +749,19 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
         """The templates in the current region's wording, FAA or ICAO."""
         return self.libraries[self.region.style]
 
+    def _own(self, callsign: Callsign) -> Callsign:
+        """The flight's callsign as the plan or the sim gives it (kept), with the pilot's own words for it when
+        they wrote some for this one."""
+        self._own_given = callsign
+        words = self.cfg.spoken_callsigns.get(callsign.ident, "")
+        return callsign.said_as(words) if words else callsign
+
+    def set_spoken_callsigns(self, spoken: dict[str, str]) -> None:
+        """The pilot's words for callsigns, changed in flight: ATC says and hears the flight's so from now."""
+        self.cfg.spoken_callsigns = dict(spoken)
+        if self.state.flight.callsign is not None:
+            self.state.flight.callsign = self._own(getattr(self, "_own_given", None) or self.state.flight.callsign)
+
     def handle(self, event: BusEvent) -> list[BusEvent]:
         # Everything said in this step is worded for where the controller the pilot is talking to sits.
         self.region = self._region()
@@ -838,10 +853,12 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
             self._reports[event.icao] = event
         elif isinstance(event, AircraftIdentity):
             if not self.cfg.callsign and event.atc_id:
-                self.state.flight.callsign = Callsign.from_sim(event.atc_id, event.airline, event.flight_number, event.atc_type)
+                self.state.flight.callsign = self._own(Callsign.from_sim(event.atc_id, event.airline, event.flight_number,
+                                                                         event.atc_type))
             elif self.cfg.callsign and self.state.flight.callsign is not None:
                 # Keep the type for abbreviated callsigns ("Boeing 38B") even when the ident is overridden.
-                self.state.flight.callsign = replace(self.state.flight.callsign, type_name=clean_sim_name(event.atc_type))
+                own = getattr(self, "_own_given", None) or self.state.flight.callsign
+                self.state.flight.callsign = self._own(replace(own, type_name=clean_sim_name(event.atc_type)))
             self._aircraft_title = event.title
             # The type from the sim's model, else from the title (the iniBuilds A330's model is blank: "A330-300 (RR)"
             # is an A333), else what the flight plan said.
@@ -1106,7 +1123,7 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
         flight.destination = self.cfg.destination.upper() if self.cfg.destination else None
         flight.cruise_ft = self.cfg.cruise_ft
         if self.cfg.callsign:
-            flight.callsign = Callsign.named(self.cfg.callsign)
+            flight.callsign = self._own(Callsign.named(self.cfg.callsign))
         self.tracker.context_builder.destination = flight.destination
         self.tracker.detector.cruise_ft = flight.cruise_ft
         self._own_runway.clear()

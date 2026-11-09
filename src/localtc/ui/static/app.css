@@ -141,6 +141,8 @@ main { flex: 1 1 auto; min-height: 0; position: relative; background: var(--pane
 .acall { color: var(--text-2); white-space: nowrap; }
 .acall .check { color: var(--green); margin-left: 6px; }
 .acall .plane { color: var(--green); margin-left: 6px; }
+.said { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin-top: 6px; color: var(--text-2); }
+.said input { width: 260px; max-width: 100%; margin-left: 6px; }
 .freqs > .muted { grid-column: 1 / -1; }
 .freqs { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 6px 14px; margin-top: 10px; }
 .fq { display: flex; gap: 8px; align-items: baseline; cursor: pointer; padding: 1px 4px; margin: -1px -4px; border-radius: 3px; white-space: nowrap; }

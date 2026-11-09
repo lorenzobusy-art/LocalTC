@@ -148,3 +148,27 @@ def test_a_callsign_no_airline_list_knows_is_heard_spelled_or_typed():
                  "Copy the wind and caution, cleared for takeoff runway 10, Victor November Delta 1128."):
         assert judge(normalize(said), ours) == "ours", said
     assert judge(normalize("Victor November Delta 1123"), ours) == "other"
+
+
+def test_a_callsign_said_as_the_pilot_wrote_it_is_said_and_heard_so():
+    from localtc.atc_core.readback.callsign_check import judge
+    from localtc.atc_core.readback.normalize import normalize
+    from localtc.atc_core.session import Callsign
+
+    ours = Callsign.named("VND1128").said_as("ita arrow 1128")
+    assert speech.callsign(ours) == "ita arrow one one two eight"  # its number digit by digit
+    assert speech.callsign_display(ours) == "Ita Arrow 1128"
+    for said in ("Genoa ground, ita arrow 1128, request taxi", "ita arrow one one two eight"):
+        assert judge(normalize(said), ours) == "ours", said
+    assert judge(normalize("ita arrow 1123"), ours) == "close"
+    assert Callsign.named("VND1128").said_as("  ") == Callsign.named("VND1128")
+
+
+def test_the_pilots_words_for_the_callsign_change_in_flight_and_go_back():
+    engine, own = parked_engine()
+    ident = engine.state.flight.callsign.ident
+    before = speech.callsign(engine.state.flight.callsign)
+    engine.set_spoken_callsigns({ident: "Speedbird one two three"})
+    assert speech.callsign(engine.state.flight.callsign) == "Speedbird one two three"
+    engine.set_spoken_callsigns({ident: ""})
+    assert speech.callsign(engine.state.flight.callsign) == before

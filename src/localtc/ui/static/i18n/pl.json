@@ -1567,5 +1567,9 @@
 "{0} hybrid from now": "Od teraz {0} hybrydowo",
 "{0} not reached: {1}": "{0} nieosiągalne: {1}",
 "{0}: its controllers are looked up once the flight starts.": "{0}: jego kontrolerzy są wyszukiwani po rozpoczęciu lotu.",
-"This version (VATSIM/IVAO hybrid) follows only the updates of {0}. To go back to the official LocalTC, reinstall it.": "Ta wersja (VATSIM/IVAO hybrydowa) korzysta tylko z aktualizacji {0}. Aby wrócić do oficjalnego LocalTC, zainstaluj go ponownie."
+"This version (VATSIM/IVAO hybrid) follows only the updates of {0}. To go back to the official LocalTC, reinstall it.": "Ta wersja (VATSIM/IVAO hybrydowa) korzysta tylko z aktualizacji {0}. Aby wrócić do oficjalnego LocalTC, zainstaluj go ponownie.",
+"ATC will say \"{0}\"": "ATC powie \"{0}\"",
+"ATC will say the callsign its own way": "ATC powie znak wywoławczy po swojemu",
+"Callsign said as": "Znak wywoławczy wymawiany jako",
+"Write it as ATC should say it, e.g. \"ita arrow 1128\": a number in it is said digit by digit, and ATC hears you say it so. Blank: LocalTC's.": "Wpisz tak, jak ma to mówić ATC, np. \"ita arrow 1128\": liczby są mówione cyfra po cyfrze, a ATC rozpozna cię, gdy tak powiesz. Puste: wersja LocalTC."
 }

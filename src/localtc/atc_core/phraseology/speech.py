@@ -249,6 +249,8 @@ def circling(value: Approach) -> tuple[str, str]:
 
 
 def callsign(value: Callsign) -> str:
+    if value.spoken:  # the pilot's own words: a number in them said digit by digit ("one one two eight")
+        return re.sub(r"\d+", lambda m: digits(m.group(0)), value.spoken)
     if value.is_airline:
         return f"{value.telephony} {group_form(value.flight_number)}"
     if value.abbreviated:
@@ -258,6 +260,8 @@ def callsign(value: Callsign) -> str:
 
 
 def callsign_display(value: Callsign) -> str:
+    if value.spoken and not value.is_airline:
+        return value.spoken
     if value.is_airline:
         return f"{value.telephony} {value.flight_number}"
     if value.abbreviated:

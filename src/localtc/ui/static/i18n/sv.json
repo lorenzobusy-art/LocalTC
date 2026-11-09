@@ -1567,5 +1567,9 @@
 "{0} hybrid from now": "{0} hybrid från och med nu",
 "{0} not reached: {1}": "{0} nåddes inte: {1}",
 "{0}: its controllers are looked up once the flight starts.": "{0}: dess flygledare söks upp när flygningen startar.",
-"This version (VATSIM/IVAO hybrid) follows only the updates of {0}. To go back to the official LocalTC, reinstall it.": "Den här versionen (VATSIM/IVAO hybrid) följer bara uppdateringarna från {0}. Installera om det officiella LocalTC för att gå tillbaka."
+"This version (VATSIM/IVAO hybrid) follows only the updates of {0}. To go back to the official LocalTC, reinstall it.": "Den här versionen (VATSIM/IVAO hybrid) följer bara uppdateringarna från {0}. Installera om det officiella LocalTC för att gå tillbaka.",
+"ATC will say \"{0}\"": "ATC säger \"{0}\"",
+"ATC will say the callsign its own way": "ATC säger anropssignalen på sitt eget sätt",
+"Callsign said as": "Anropssignal sägs som",
+"Write it as ATC should say it, e.g. \"ita arrow 1128\": a number in it is said digit by digit, and ATC hears you say it so. Blank: LocalTC's.": "Skriv den som ATC ska säga den, t.ex. \"ita arrow 1128\": siffror sägs en i taget, och ATC känner igen dig när du säger den så. Tomt: LocalTC:s."
 }

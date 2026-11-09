@@ -14,7 +14,7 @@ controller knows who they're talking to. What they do pick up on:
 from typing import Literal
 
 from localtc.atc_core.airlines import TELEPHONY
-from localtc.atc_core.readback.normalize import Token
+from localtc.atc_core.readback.normalize import Token, normalize
 from localtc.atc_core.values import Callsign
 
 Verdict = Literal["ours", "absent", "close", "other"]
@@ -62,7 +62,7 @@ def _dropped(heard: str, ours: str) -> bool:
 def judge(tokens: list[Token], expected: Callsign | None) -> Verdict:
     """``ours`` (heard, near enough), ``absent`` (no callsign said), ``close`` (one slip away from ours), or
     ``other`` (somebody else's)."""
-    if expected is not None and _spelled(tokens, expected.ident):
+    if expected is not None and (_spelled(tokens, expected.ident) or _own_words(tokens, expected.spoken)):
         return "ours"  # its letters and number said or typed as they're written ("Victor November Delta 1128", "VND1128")
     if expected is None or not expected.is_airline:
         return _judge_registration(tokens, expected)
@@ -96,6 +96,15 @@ def judge(tokens: list[Token], expected: Callsign | None) -> Verdict:
                     return "ours"
                 return "close" if _distance(heard, number) <= 1 else "other"
     return verdict
+
+
+def _own_words(tokens: list[Token], spoken: str) -> bool:
+    """The pilot's own words for the callsign ("ita arrow 1128"), heard as they wrote them."""
+    if not spoken:
+        return False
+    ours = [t.text.lower() for t in normalize(spoken)]
+    heard = [t.text.lower() for t in tokens]
+    return bool(ours) and any(heard[i : i + len(ours)] == ours for i in range(len(heard) - len(ours) + 1))
 
 
 def _spelled(tokens: list[Token], ident: str) -> bool:

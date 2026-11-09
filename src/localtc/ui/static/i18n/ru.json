@@ -1567,5 +1567,9 @@
 "{0} hybrid from now": "{0} гибрид с этого момента",
 "{0} not reached: {1}": "{0} недоступно: {1}",
 "{0}: its controllers are looked up once the flight starts.": "{0}: его диспетчеры ищутся, как только начнётся полёт.",
-"This version (VATSIM/IVAO hybrid) follows only the updates of {0}. To go back to the official LocalTC, reinstall it.": "Эта версия (гибрид VATSIM/IVAO) получает только обновления {0}. Чтобы вернуться к официальному LocalTC, переустановите его."
+"This version (VATSIM/IVAO hybrid) follows only the updates of {0}. To go back to the official LocalTC, reinstall it.": "Эта версия (гибрид VATSIM/IVAO) получает только обновления {0}. Чтобы вернуться к официальному LocalTC, переустановите его.",
+"ATC will say \"{0}\"": "ATC скажет «{0}»",
+"ATC will say the callsign its own way": "ATC произнесёт позывной по-своему",
+"Callsign said as": "Позывной произносится как",
+"Write it as ATC should say it, e.g. \"ita arrow 1128\": a number in it is said digit by digit, and ATC hears you say it so. Blank: LocalTC's.": "Напишите так, как его должен говорить ATC, напр. «ita arrow 1128»: числа произносятся по цифрам, и ATC узнает вас, когда вы скажете так. Пусто: как в LocalTC."
 }

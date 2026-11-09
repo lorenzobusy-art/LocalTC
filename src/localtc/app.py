@@ -64,6 +64,7 @@ def engine_config(flight: FlightConfig, atc: AtcConfig):
         destination=flight.destination or None,
         cruise_ft=flight.cruise_ft or None,
         callsign=flight.callsign or None,
+        spoken_callsigns=dict(atc.spoken_callsigns),
         rules=flight.rules,
         center_name=atc.center_name,
         center_mhz=atc.center_mhz,
@@ -852,6 +853,11 @@ class LiveSession:
         """A typed pilot transmission on COM1 (or COM2)."""
         if text.strip():
             self.bus.publish(Transcript(t=self.now(), text=text.strip(), radio=2 if radio == 2 else 1, source="typed"))
+
+    def set_spoken_callsigns(self, spoken: dict[str, str]) -> None:
+        """The pilot's words for their callsign, changed in flight: ATC says and hears it so from the next call."""
+        if self.engine is not None:
+            self.engine.set_spoken_callsigns(spoken)
 
     def set_online_network(self, network: str) -> None:
         """Only LocalTC (""), VATSIM or IVAO hybrid, changed in flight: from now on, nothing restarted."""

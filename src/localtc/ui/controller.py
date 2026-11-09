@@ -610,6 +610,16 @@ class AppController:
                 log.exception("Flight view failed")
             await asyncio.sleep(FLIGHT_EVERY_S)
 
+    def _callsign_said(self, engine) -> dict:
+        """The flight's callsign as ATC says it, and the pilot's own words for it (the ATC tab's "Said as")."""
+        own = engine.state.flight.callsign
+        if own is None:
+            return {}
+        from localtc.atc_core.phraseology import speech
+
+        return {"callsign_ident": own.ident, "callsign_said": speech.callsign(own),
+                "callsign_words": self.cfg.atc.spoken_callsigns.get(own.ident, "")}
+
     def flight_view(self) -> dict:
         """What the ATC tab shows above the radio log."""
         engine = self.live.engine if self.live else None
@@ -633,6 +643,7 @@ class AppController:
             ete = {"nm": round(nm), "min": round(nm / pos["gs_kt"] * 60)}
         return {
             "callsign": snap.callsign, "aircraft": getattr(engine.state.flight, "aircraft_type", None),
+            **self._callsign_said(engine),
             "origin": snap.origin, "destination": snap.destination, "cruise_ft": snap.cruise_ft,
             "phase": snap.phase, "phase_label": PHASES.get(snap.phase or "", snap.phase or ""),
             "airport": airport_summary(airport, engine) if airport else ({"icao": icao} if icao else None),
@@ -1149,6 +1160,8 @@ class AppController:
                             "warn")
         if (guide := getattr(self.live, "guide", None) if self.live is not None else None) is not None:
             await guide.set_enabled(cfg.atc.taxi_guide)
+        if self.live is not None and cfg.atc.spoken_callsigns != self.cfg.atc.spoken_callsigns:
+            self.live.set_spoken_callsigns(cfg.atc.spoken_callsigns)  # said (and heard) so from the next call
         if self.live is not None and online_network(cfg) != online_network(self.cfg):
             self.live.set_online_network(online_network(cfg))  # Only LocalTC / VATSIM / IVAO hybrid: at once, in flight
             if cfg.traffic.enabled:  # LocalTC's traffic off with a network (its aircraft are the traffic), back without

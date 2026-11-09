@@ -342,10 +342,35 @@ function planHeader(plan) {
   $("#fl-dest").textContent = plan?.destination || "—";
 }
 
+// The callsign as ATC says it, and the pilot's own words for it: said and heard so from the next call.
+function saidAs(f) {
+  const box = $("#fl-said"), input = $("#fl-said-input");
+  box.hidden = !f.callsign_ident;
+  if (!f.callsign_ident) return;
+  input.placeholder = f.callsign_said || "";
+  input.dataset.ident = f.callsign_ident;
+  if (document.activeElement !== input) input.value = f.callsign_words || "";
+}
+
+async function saveSaidAs() {
+  const input = $("#fl-said-input"), ident = input.dataset.ident;
+  if (!ident) return;
+  const words = input.value.trim().replace(/\s+/g, " ");
+  const atc = S.settings?.settings?.atc;
+  if ((atc?.spoken_callsigns?.[ident] || "") === words) return;
+  const spoken = { ...(atc?.spoken_callsigns || {}), [ident]: words };
+  try {
+    await api("settings", { settings: { atc: { spoken_callsigns: spoken } } });
+    if (atc) atc.spoken_callsigns = spoken;
+    toast(words ? `ATC will say "${words}"` : "ATC will say the callsign its own way");
+  } catch (e) { fail(e); }
+}
+
 function setFlight(f) {
   S.flight = f || {};
   const plan = S.state.plan;
   $("#fl-callsign").textContent = f.callsign || plan?.callsign || "—";
+  saidAs(f);
   $("#fl-type").textContent = plan?.aircraft ? `[${plan.aircraft}]` : "";
   $("#fl-plan-ok").hidden = !plan;
   $("#fl-dest").textContent = f.destination || plan?.destination || "—";
@@ -452,6 +477,8 @@ async function transmit() {
 }
 $("#tx-text").addEventListener("keydown", (e) => { if (e.key === "Enter") transmit(); });
 $("#btn-send").onclick = transmit;
+$("#fl-said-input").onchange = saveSaidAs;
+$("#fl-said-input").onkeydown = (e) => { if (e.key === "Enter") e.target.blur(); };
 $("#btn-crew").onclick = async () => {
   const input = $("#tx-text"), text = input.value.trim();
   if (!text) return;

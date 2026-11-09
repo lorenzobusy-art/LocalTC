@@ -65,6 +65,10 @@
             <span class="check" id="fl-plan-ok" title="Flight plan loaded" hidden>&#9745;</span>
             <span class="plane" title="Flight">&#9992;</span></div>
         </div>
+        <div class="said small" id="fl-said" hidden>
+          <label>Callsign said as <input id="fl-said-input" autocomplete="off" spellcheck="false"></label>
+          <span class="muted">Write it as ATC should say it, e.g. "ita arrow 1128": a number in it is said digit by digit, and ATC hears you say it so. Blank: LocalTC's.</span>
+        </div>
         <div class="freqs" id="ap-freqs"><div class="muted small">Frequencies appear when the flight starts.</div></div>
       </div>
       <!-- En route: the flight's status where the airport box is, until the destination's frequencies are any use -->

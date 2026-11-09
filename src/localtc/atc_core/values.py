@@ -22,6 +22,10 @@ def clean_sim_name(value: str) -> str:
     return "" if ".text" in value or ".tts" in value or value.upper().startswith("ATCCOM") else value
 
 
+# The pilot's words for a callsign: a name with a letter in it, then the flight number ("ita arrow 1128").
+SAID_AS = re.compile(r"(.*?[A-Za-z].*?)\s+(\d{1,4}[A-Za-z]{0,2})")
+
+
 @dataclass(frozen=True)
 class Callsign:
     """``ident`` is the ATC ID (``N172LT``). Airlines also carry ``telephony`` ("Alaska") + ``flight_number``."""
@@ -31,6 +35,20 @@ class Callsign:
     flight_number: str = ""
     type_name: str = ""  # e.g. "Skyhawk", used for abbreviated GA callsigns
     abbreviated: bool = False
+    spoken: str = ""  # the pilot's own words for it ("Itarrow 1128"): said so, and heard so
+
+    def said_as(self, words: str) -> "Callsign":
+        """This callsign said as the pilot wrote it. Words then a number ("ita arrow 1128") make it a flight
+        callsign with those words for its airline, so it's heard with any number of the ways it's said."""
+        words = " ".join((words or "").split())
+        if not words:
+            return self
+        match = SAID_AS.fullmatch(words)
+        if match is None:
+            return replace(self, spoken=words)
+        name = match.group(1).strip()
+        return replace(self, spoken=words, telephony=name.title() if name.islower() else name,
+                       flight_number=match.group(2).upper(), abbreviated=False)
 
     @property
     def is_airline(self) -> bool:
