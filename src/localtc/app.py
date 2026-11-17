@@ -32,6 +32,8 @@ from localtc.replay import ReplaySource
 from localtc.sim_api.ramp import RAMP_MHZ
 from localtc.sim_api import (
     ATC_EVENT_TYPES,
+    AircraftSystems,
+    AircraftVars,
     Airport,
     AirportData,
     AtcTransmission,
@@ -731,7 +733,7 @@ async def run_session(
         arrived: asyncio.Event | None = None
         if cfg.atc.enabled and cfg.session.auto_stop_at_gate and (session.source_kind == "live" or cfg.session.auto_stop_in_replay):
             arrived = asyncio.Event()
-            consumers.append(asyncio.create_task(_stop_at_gate(bus.subscribe(FlightArrived), arrived, cfg.session.auto_stop_delay_s)))
+            consumers.append(asyncio.create_task(_stop_at_gate(bus.subscribe(FlightArrived, AircraftSystems, AircraftVars), arrived, cfg.session.auto_stop_delay_s)))
         pump_task = asyncio.create_task(pump(source, bus))
         if on_ready is not None:
             on_ready(LiveSession(cfg=cfg, bus=bus, source=source, session=session, engine=engine, atc=atc_service,
@@ -799,13 +801,35 @@ async def _keep_saving(bus: EventBus, save: Callable[[], None]) -> None:
             save()
 
 
+BATTERIES = ("L:S_OH_ELEC_BAT1", "L:S_OH_ELEC_BAT2")  # an add-on's own battery switches (the Fenix's), when it has them
+
+
+def batteries_off(systems: AircraftSystems | None, switches: dict[str, float]) -> bool:
+    """The aircraft shut down for good: both of its own battery switches off (the Fenix's BAT 1 and 2), else the sim's
+    master battery off. Nothing read yet: not off."""
+    own = [switches[name] for name in BATTERIES if name in switches]
+    if own:
+        return all(value < 0.5 for value in own)
+    return systems is not None and not systems.battery
+
+
 async def _stop_at_gate(events: Subscription, arrived: asyncio.Event, delay_s: float) -> None:
-    """Sets ``arrived`` (the session then ends) once ATC sees the aircraft parked at a gate at the destination, after
-    ``delay_s`` for ATC's last words. Once: the session is over after it."""
+    """Sets ``arrived`` (the session then ends) once ATC has seen the aircraft parked at a gate at the destination and
+    the batteries are then switched off (BAT 1 and 2), after ``delay_s`` for ATC's last words. Parked alone isn't the
+    end: the parking and securing checklists, the deboarding, come after it. Once: the session is over after it."""
+    parked = None
+    systems: AircraftSystems | None = None
+    switches: dict[str, float] = {}
     async for event in events:
-        if isinstance(event, FlightArrived):
-            log.info("Arrived: %s at %s. The flight stops in %.0f s (Quick Settings → ATC → Stop the flight at the gate).",
-                     event.gate, event.airport, delay_s, extra=CONSOLE)
+        if isinstance(event, AircraftSystems):
+            systems = event
+        elif isinstance(event, AircraftVars):
+            switches.update({k: v for k, v in event.values.items() if k in BATTERIES})
+        elif isinstance(event, FlightArrived) and parked is None:
+            parked = event
+            log.info("Arrived: %s at %s. The flight stops once the batteries are off (Quick Settings → ATC → Stop the "
+                     "flight at the gate).", event.gate, event.airport, extra=CONSOLE)
+        if parked is not None and batteries_off(systems, switches):
             await asyncio.sleep(delay_s)
             arrived.set()
             return
@@ -909,6 +933,26 @@ class LiveSession:
             return False
         (self.voice.service.press if down else self.voice.service.release)(radio)
         return True
+
+    async def copilot_tune(self, mode: str) -> str:
+        """The ATC tab's button: the copilot puts the next frequency (``AtcEngine.next_frequency``) on COM1, active with
+        the old one to standby ("swap"), or in standby only for the pilot to flip ("standby"). Returns what was done."""
+        from localtc.atc_core.facilities import channel_khz
+        from localtc.sim_api import SendSimEvent
+
+        found = self.engine.next_frequency() if self.engine is not None else None
+        if found is None:
+            return ""
+        mhz, who = found
+        hz = channel_khz(mhz) * 1000
+        own = self.engine.state.aircraft
+        if mode == "standby":
+            await self.source.send(SendSimEvent(name="COM_STBY_RADIO_SET_HZ", value=hz))
+            return f"{who} {mhz:.3f} in standby"
+        if own is not None and own.com1_mhz:
+            await self.source.send(SendSimEvent(name="COM_STBY_RADIO_SET_HZ", value=channel_khz(own.com1_mhz) * 1000))
+        await self.source.send(SetComFrequency(hz=hz, radio=1))
+        return f"{who} {mhz:.3f} on COM1"
 
     async def tune(self, mhz: float, radio: int = 1) -> None:
         from localtc.atc_core.facilities import channel_khz

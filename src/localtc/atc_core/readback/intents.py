@@ -391,6 +391,9 @@ def match_intents(tokens: list[Token]) -> list[IntentMatch]:
     elif _has_any(tokens, ("request",), ("requesting",), ("like",), ("can", "we"), ("could", "we")) and (
             direction := _direction(tokens)) is not None:
         add("request_altitude", direction=direction)  # "request climb": ATC picks the altitude
+    elif _has_any(tokens, ("ready", "for", "descent"), ("ready", "to", "descend"), ("ready", "for", "the", "descent"),
+                  ("ready", "for", "lower"), ("top", "of", "descent")):
+        add("request_altitude", direction="down")  # "ready for descent": asking for it (was "maintain FL360")
     asking = _has_any(tokens, ("request",), ("requesting",), ("like",), ("can", "we"), ("could", "we"), ("able", "to"),
                       ("want",), ("need",))
     if _has_any(tokens, ("cross",), ("crossing",)) and asking and (crossed := runways(tokens) + hold_short(tokens)):

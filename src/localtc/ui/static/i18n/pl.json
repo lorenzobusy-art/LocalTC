@@ -901,7 +901,6 @@
 "Stop": "Stop",
 "Stop sharing": "Przestań udostępniać",
 "Stop sharing this flight? The link stops working; sharing it again makes a new one.": "Przestać udostępniać ten lot? Link przestanie działać; ponowne udostępnienie tworzy nowy.",
-"Stop the flight at the gate: once parked at a gate or stand at the destination (stopped, taxi done), the flight ends as if you pressed Stop": "Zakończ lot przy bramce: po zaparkowaniu przy bramce lub na stanowisku w celu (zatrzymany, kołowanie zakończone) lot kończy się tak, jakbyś nacisnął Stop",
 "Stopping ...": "Zatrzymywanie ...",
 "Support": "Pomoc",
 "Support & feedback": "Pomoc i opinie",
@@ -1585,5 +1584,15 @@
 "Departure taxiways": "Drogi kołowania przy odlocie",
 "Holding point": "Punkt oczekiwania",
 "Taxiways: AE B BT": "Drogi kołowania: AE B BT",
-"Where to hold short on the way in: a runway (16L) or a taxiway": "Gdzie się zatrzymać przy kołowaniu po przylocie: pas (16L) lub droga kołowania"
+"Where to hold short on the way in: a runway (16L) or a taxiway": "Gdzie się zatrzymać przy kołowaniu po przylocie: pas (16L) lub droga kołowania",
+"Active": "Aktywna",
+"Copilot: next frequency": "Drugi pilot: następna częstotliwość",
+"Copilot: {0}": "Drugi pilot: {0}",
+"How the copilot sets it": "Jak ustawia ją drugi pilot",
+"In standby only: you flip it": "Tylko w standby: przełączasz sam",
+"No new frequency to set": "Brak nowej częstotliwości do ustawienia",
+"On COM1 active, the old one to standby": "Na COM1 aktywna, poprzednia do standby",
+"Standby": "Standby",
+"Stop the flight at the gate: once parked at a gate or stand at the destination and the batteries are switched off (BAT 1 and 2), the flight ends as if you pressed Stop": "Zakończ lot przy bramce: po zaparkowaniu przy bramce lub stanowisku w miejscu docelowym i wyłączeniu akumulatorów (BAT 1 i 2) lot kończy się jak po naciśnięciu Stop",
+"The copilot sets the frequency you've been sent to (by LocalTC or the online network)": "Drugi pilot ustawia częstotliwość, na którą cię skierowano (LocalTC lub sieć online)"
 }

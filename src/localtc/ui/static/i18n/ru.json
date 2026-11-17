@@ -901,7 +901,6 @@
 "Stop": "Стоп",
 "Stop sharing": "Прекратить публикацию",
 "Stop sharing this flight? The link stops working; sharing it again makes a new one.": "Прекратить делиться этим полётом? Ссылка перестанет работать; новая публикация создаст новую.",
-"Stop the flight at the gate: once parked at a gate or stand at the destination (stopped, taxi done), the flight ends as if you pressed Stop": "Завершать полёт у гейта: как только вы встали у гейта или на стоянку в пункте назначения (остановились, руление окончено), полёт заканчивается, как будто вы нажали «Стоп»",
 "Stopping ...": "Остановка ...",
 "Support": "Поддержка",
 "Support & feedback": "Поддержка и отзывы",
@@ -1585,5 +1584,15 @@
 "Departure taxiways": "Рулёжки при вылете",
 "Holding point": "Место ожидания",
 "Taxiways: AE B BT": "Рулёжки: AE B BT",
-"Where to hold short on the way in: a runway (16L) or a taxiway": "Где остановиться перед ней при рулении после посадки: полоса (16L) или рулёжка"
+"Where to hold short on the way in: a runway (16L) or a taxiway": "Где остановиться перед ней при рулении после посадки: полоса (16L) или рулёжка",
+"Active": "Активная",
+"Copilot: next frequency": "Второй пилот: следующая частота",
+"Copilot: {0}": "Второй пилот: {0}",
+"How the copilot sets it": "Как её ставит второй пилот",
+"In standby only: you flip it": "Только в резерв: переключаете вы",
+"No new frequency to set": "Новой частоты нет",
+"On COM1 active, the old one to standby": "На COM1 в работу, прежняя в резерв",
+"Standby": "Резерв",
+"Stop the flight at the gate: once parked at a gate or stand at the destination and the batteries are switched off (BAT 1 and 2), the flight ends as if you pressed Stop": "Завершать полёт у гейта: после стоянки у гейта или на стоянке в пункте назначения и выключения аккумуляторов (BAT 1 и 2) полёт завершается, как по кнопке Stop",
+"The copilot sets the frequency you've been sent to (by LocalTC or the online network)": "Второй пилот ставит частоту, на которую вас направили (LocalTC или онлайн-сеть)"
 }

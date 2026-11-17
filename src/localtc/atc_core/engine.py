@@ -384,6 +384,7 @@ SPEED_GATES = ((30.0, 250, "speed250"), (25.0, 210, "speed210"), (12.0, 180, "sp
 # 210 and 180 with nobody around was "unrealistic".
 SPEED_LIMIT_BELOW_FT = 10000.0
 DESCENT_LEAD_MIN = 5.0  # the descent is cleared this long before the top of descent, at the current groundspeed
+DECELERATION_NM = 10.0  # the miles an airliner takes to slow down on the way down, on top of 3 nm a thousand feet
 # Joining the final: within this of the extended centreline, this far out or less, pointing no further off
 # the final course than this (so a base leg counts and a downwind doesn't).
 JOIN_LATERAL_NM, JOIN_FINAL_NM, JOIN_HEADING_DEG = 3.0, 20.0, 100.0
@@ -770,6 +771,22 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
         self.cfg.spoken_callsigns = dict(spoken)
         if self.state.flight.callsign is not None:
             self.state.flight.callsign = self._own(getattr(self, "_own_given", None) or self.state.flight.callsign)
+
+    def next_frequency(self) -> tuple[float, str] | None:
+        """The frequency the flight should go to next, and whose: the controller it was handed to (LocalTC's, or the
+        network's in its place), the network's controller now working the airspace, LocalTC's after the network let
+        the flight go. None: nothing to change to (COM1 is already where it should be)."""
+        own = self.state.aircraft
+        tx = own.tx_mhz if own is not None else None
+        candidates: list[tuple[float, str]] = []
+        if (expected := self.state.comms.expected) is not None:
+            candidates.append((expected.mhz, expected.station))
+        if self.online_best is not None and self.online_tuned is None:
+            candidates.append((self.online_best.frequency_mhz, self.online_best.callsign))
+        for local in (self.online_back_to, self.online_gap):
+            if local is not None:
+                candidates.append((local.mhz, local.station))
+        return next(((mhz, who) for mhz, who in candidates if tx is None or not online_atc.same_mhz(mhz, tx)), None)
 
     def set_given_taxi(self, runway: str, taxiways: str, hold: str = "", leg: str = "") -> str:
         """A taxi the pilot was given on the online network (IVAO, VATSIM), typed on the Live Map: the runway, the
@@ -1655,6 +1672,11 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
         contact Milano Radar 126.750, online on VATSIM" (the airspace by LocalTC's name for it). Only when the pilot
         is on one of LocalTC's controllers and nothing else is being said to them."""
         tuned = self.state.comms.tuned
+        if own.on_ground:
+            # On the ground the network's controller logging on is the copilot's to say ("IVAO connection for this
+            # airspace: LIRF_GND, set 121.9"), not a "contact Fiumicino Clearance 121.9" from LocalTC's clearance,
+            # with the pilot to start again with someone else on the same frequency.
+            return False
         if tuned is None or not tuned.matches(own.tx_mhz) or self.online_tuned is not None \
                 or online_atc.same_mhz(own.tx_mhz, to.frequency_mhz) \
                 or any(item.handoff_to is not None for item in self._scheduled):
@@ -4703,7 +4725,9 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
         if self._vector_leg in ("join", "downwind") and runway and (leg := self._vector(own, runway)) is not None                 and leg.track_nm > FAR_ROUND_NM:
             to_go = max(to_go, leg.track_nm)  # vectored: the miles round the pattern, not abeam the field ("maintain
             # 180 until five mile final" on a downwind 30 miles from landing)
-        star_kt = self._star_speed()
+        # The STAR's published speed only while flying it: vectored off it, approach slows the flight down itself (off
+        # Genoa's IDON1J, at 200 kt, the 250 and the 210 were never given, and the flight came in at 280 kt).
+        star_kt = self._star_speed() if self._vector_leg is None else 0
         for distance, speed, flag in SPEED_GATES:
             if assigned is not None and speed >= assigned:
                 continue  # slowed down already: never sped up again (210, then "maintain 250", then 180)
@@ -6104,6 +6128,10 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
             return False
         level = st.assignments.altitude_ft or int(own.alt_indicated_ft)
         start_nm = self.route.descent_distance_nm(geo.airport.lat, geo.airport.lon, level, geo.airport.elev_ft)
+        # Never later than three miles a thousand feet and the miles to slow down: the plan's top of descent, as the
+        # crow flies from the field, came after the Fenix's own (Rome to Genoa: "ready for descent" at 106 nm was
+        # told "maintain FL360", and the descent came a minute after the FMS's top of descent).
+        start_nm = max(start_nm, (level - geo.airport.elev_ft) / 1000 * 3 + DECELERATION_NM)
         return geo.distance_nm(own.lat, own.lon) <= start_nm + own.gs_kt / 60 * max(lead_min, DESCENT_LEAD_MIN)
 
     def _clear_descent(self, t: float, own: OwnshipState, facility: Facility, plan: dict[str, Any], *, late: bool = False) -> None:
@@ -6574,6 +6602,13 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
         own = self.state.aircraft
         due = sorted((s for s in self._scheduled if s.due <= t and (s.reply or not paused)), key=lambda s: s.due)
         for item in list(due):
+            if item.instruction_id == "common.contact" and item.handoff_to is not None and own is not None \
+                    and item.handoff_to.matches(own.tx_mhz) and not item.facility.matches(own.tx_mhz):
+                # "Contact Roma Departure" said again by the tower with the pilot already on 130.9: nobody there to hear
+                # it, and nothing left to say.
+                due.remove(item)
+                self._scheduled.remove(item)
+                continue
             if (heard := self._reach(item.facility, own)) is not None and not heard.in_range:
                 due.remove(item)  # the pilot wouldn't hear it: not said (anything still due is said when it's in range)
                 self._scheduled.remove(item)

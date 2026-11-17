@@ -434,3 +434,25 @@ def test_this_flights_speech_and_offers():
     engine.taken_alt = 19000
     engine._assign(altitude_ft=24000)
     assert engine.taken_alt is None  # LocalTC's own level: held to it again
+
+
+def test_the_next_frequency_is_the_one_handed_to_or_the_networks():
+    from localtc.atc_core.facilities import Facility
+
+    engine, own = parked_engine()
+    assert engine.next_frequency() is None
+    ground = Facility("ground", "Paine Ground", 121.8, "KPAE")
+    engine.state.comms.expected = ground
+    assert engine.next_frequency() == (121.8, "Paine Ground")
+    engine.state.aircraft = msgspec.structs.replace(own, com1_mhz=121.8)
+    assert engine.next_frequency() is None  # on it already
+
+
+def test_a_network_controller_logging_on_while_on_the_ground_is_the_copilots_to_say():
+    from localtc.sim_api import OnlineController
+
+    engine, own = parked_engine(online_network="ivao")
+    gnd = OnlineController(callsign="KPAE_GND", frequency_mhz=121.9, kind="GND", lat=own.lat, lon=own.lon,
+                           range_nm=10.0, name="")
+    assert engine._online_handoff(own, gnd, "DEL") is False  # LocalTC's clearance says nothing
+    assert not [s for s in engine._scheduled if s.instruction_id == "common.contact"]

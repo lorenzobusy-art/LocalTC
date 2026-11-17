@@ -901,7 +901,6 @@
 "Stop": "Stoppa",
 "Stop sharing": "Sluta dela",
 "Stop sharing this flight? The link stops working; sharing it again makes a new one.": "Sluta dela den här flygningen? Länken slutar fungera; att dela igen skapar en ny.",
-"Stop the flight at the gate: once parked at a gate or stand at the destination (stopped, taxi done), the flight ends as if you pressed Stop": "Avsluta flygningen vid gaten: när du står parkerad vid en gate eller uppställningsplats på destinationen (stillastående, taxning klar) avslutas flygningen som om du tryckt på Stoppa",
 "Stopping ...": "Stoppar ...",
 "Support": "Support",
 "Support & feedback": "Support och synpunkter",
@@ -1585,5 +1584,15 @@
 "Departure taxiways": "Taxibanor vid avgång",
 "Holding point": "Väntpunkt",
 "Taxiways: AE B BT": "Taxibanor: AE B BT",
-"Where to hold short on the way in: a runway (16L) or a taxiway": "Var du ska stanna före på väg in: en bana (16L) eller en taxibana"
+"Where to hold short on the way in: a runway (16L) or a taxiway": "Var du ska stanna före på väg in: en bana (16L) eller en taxibana",
+"Active": "Aktiv",
+"Copilot: next frequency": "Andrepilot: nästa frekvens",
+"Copilot: {0}": "Andrepilot: {0}",
+"How the copilot sets it": "Hur andrepiloten ställer in den",
+"In standby only: you flip it": "Bara i standby: du växlar själv",
+"No new frequency to set": "Ingen ny frekvens att ställa in",
+"On COM1 active, the old one to standby": "På COM1 aktiv, den gamla till standby",
+"Standby": "Standby",
+"Stop the flight at the gate: once parked at a gate or stand at the destination and the batteries are switched off (BAT 1 and 2), the flight ends as if you pressed Stop": "Avsluta flygningen vid gaten: parkerad vid en gate eller uppställningsplats på destinationen och batterierna avslagna (BAT 1 och 2) avslutas flygningen som om du tryckt på Stop",
+"The copilot sets the frequency you've been sent to (by LocalTC or the online network)": "Andrepiloten ställer in frekvensen du skickats till (av LocalTC eller onlinenätet)"
 }

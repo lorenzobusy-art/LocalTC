@@ -117,6 +117,13 @@
         </div>
       </div>
 
+      <!-- The copilot puts the next frequency on COM1: active (the old one to standby) or standby only -->
+      <div class="tunebar" id="tune-bar">
+        <button class="btn small" id="btn-copilot-tune" title="The copilot sets the frequency you've been sent to (by LocalTC or the online network)">Copilot: next frequency</button>
+        <div class="seg" id="tune-mode" role="group" aria-label="How the copilot sets it">
+          <button class="btn small" data-mode="swap" aria-pressed="true" title="On COM1 active, the old one to standby">Active</button><button class="btn small" data-mode="standby" aria-pressed="false" title="In standby only: you flip it">Standby</button>
+        </div>
+      </div>
       <div class="devbar" id="devbar" hidden>
         <span class="devtag">DEV</span>
         <input id="note-text" type="text" placeholder="Mark this moment: what went wrong?" maxlength="300">

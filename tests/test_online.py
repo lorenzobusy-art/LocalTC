@@ -68,14 +68,14 @@ def test_the_controller_for_the_phase_falls_back_to_the_one_above():
 def test_the_pilot_is_told_and_localtc_is_quiet_on_their_frequency_then_back():
     engine, own = parked_engine(destination="KBFI", cruise_ft=12000, online_network="vatsim")
     engine.handle(OnlineAtc(t=1, network="vatsim", controllers=(ctl("KPAE_DEL", 128.0),)))
-    # On LocalTC's clearance: it hands over ("contact Paine Clearance 128.0"), the copilot not over it.
+    # On the ground, on LocalTC's clearance: the copilot says it (no "contact Paine Clearance 128.0" from LocalTC).
     handover = [o for s in range(2, 8) for o in engine.handle(msgspec.structs.replace(own, t=s))]
-    assert alerts(handover, "online") == [] and "128" in transmissions(handover)[0].text
+    (told,) = alerts(handover, "online")
+    assert told.detail == "VATSIM connection for this airspace: KPAE_DEL, set 128.000 on COM1"
+    assert transmissions(handover) == []
 
     on_vatsim = msgspec.structs.replace(own, t=9, com1_mhz=128.0)
-    switched = engine.handle(on_vatsim)  # (no readback said: the copilot once the pilot is on their frequency)
-    (told,) = alerts(switched, "online")
-    assert told.detail == "VATSIM connection for this airspace: KPAE_DEL, set 128.000 on COM1"
+    switched = engine.handle(on_vatsim)
     tuned = [o for o in switched if isinstance(o, RadioTuned)]
     assert engine.online_muted and tuned[0].station == "KPAE_DEL (VATSIM)"
     assert transmissions(say(engine, on_vatsim, 5, "Paine Clearance, 172LT, IFR to Boeing Field, ready to copy")) == []
@@ -438,14 +438,17 @@ def test_the_copilot_says_once_where_to_go_off_the_network():
 # --- LocalTC's controllers hand over to the network; released by it, the airspace after theirs ------------------
 
 
-def test_localtcs_controller_hands_the_flight_to_the_network_when_its_airspace_goes_online():
+def test_on_the_ground_a_network_controller_logging_on_is_the_copilots_to_say_not_localtcs():
+    """Parked on LocalTC's clearance, the network's delivery logs on: the copilot says where (once), and LocalTC's
+    clearance says nothing (it used to send the flight there, "contact Paine Clearance 128.0", and the pilot started
+    again with someone else)."""
     engine, own = parked_engine(online_network="vatsim")  # on Paine Clearance (LocalTC's), 127.25
     engine.handle(OnlineAtc(t=1, network="vatsim", controllers=(ctl("KPAE_DEL", 128.0),)))
     outputs = engine.handle(msgspec.structs.replace(own, t=2))
     outputs += [o for s in range(3, 8) for o in engine.handle(msgspec.structs.replace(own, t=s))]
-    (contact,) = transmissions(outputs)
-    assert "128" in contact.text and "VATSIM" not in contact.text  # the controller says where; the copilot whose
-    assert contact.instruction_id == "common.contact"
+    assert transmissions(outputs) == []
+    assert [a.detail for a in alerts(outputs, "online")] == [
+        "VATSIM connection for this airspace: KPAE_DEL, set 128.000 on COM1"]
 
 
 def test_a_handoff_to_an_airspace_the_network_works_goes_to_their_frequency():
@@ -578,9 +581,13 @@ def test_a_route_clipping_again_the_airspace_that_let_it_go_stays_where_it_is():
 def test_the_copilot_says_its_the_networks_after_the_readback_of_the_handover_not_over_it():
     from localtc.sim_api import ReadbackEvaluated
 
+    from localtc.atc_core.facilities import Facility
+
     engine, own = parked_engine(online_network="ivao")
     engine.handle(OnlineAtc(t=1, network="ivao", controllers=(ctl("KPAE_DEL", 128.0),)))
-    handover = [o for s in range(2, 8) for o in engine.handle(msgspec.structs.replace(own, t=s))]
-    assert transmissions(handover) and alerts(handover, "online") == []
+    # A handover LocalTC's controller makes to the network's (in the air, a sector's): the copilot's word after it.
+    local = Facility("clearance", "Paine Clearance", 127.25, "KPAE")
+    engine._schedule(2, "common.contact", {"station": "Paine Clearance", "frequency": 127.25}, local, handoff_to=local)
+    assert engine._online_after_readback and "common.contact" in engine._online_after_readback
     out = engine._online_reminders(own, [ReadbackEvaluated(t=8, instruction_id="common.contact", status="correct")])
     assert [a.kind for a in out] == ["online"] and engine._online_after_readback == {}

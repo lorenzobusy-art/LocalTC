@@ -144,6 +144,10 @@ def vector(geo: AirportGeometry, end: RunwayEndGeometry, lat: float, lon: float,
         return Vector((inbound - 90 * cut) % 360, "base", abs(lateral) + out, cut)
     if after == "base" or (patterned and out >= p.base_nm - p.lead_nm):  # turning takes a mile or two
         return Vector(toward_centreline, "base", abs(off) + max(out, p.gate_nm), s)
+    if after == "straight_in" and out >= p.gate_nm - 2 and not outbound_now:
+        # Flying in on the straight-in, now inside the base's miles: on to the final at 30 degrees. (Genoa's 28, 14 nm
+        # out and 3.5 nm off: sent out on a downwind, heading 102, the reciprocal of the final it was joining.)
+        return intercept()
     if not patterned and out >= p.base_nm and off <= out * math.tan(math.radians(p.cone_deg)):
         # Out on the approach side, roughly in line: straight at a point it can join at 30 degrees.
         join = max(p.gate_nm, out - off * math.sqrt(3))

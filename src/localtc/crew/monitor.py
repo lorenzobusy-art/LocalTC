@@ -1575,9 +1575,14 @@ class Monitor(WatchMixin):
                 # when the copilot reads them and the checklist leaves the setting to the captain: "Packs 1 and 2?
                 # Showing on.").
                 if shown is not None and shown[1] is None and line.sensed_by_vars:
-                    lines.append(f"{run._speakable(line.challenge)}? Showing {shown[0]}.")
-                else:
-                    lines.append(f"{run._speakable(line.challenge)}?")
+                    # An item left to the captain's choice ("PACKS 1 & 2 ... AS RQRD") that the copilot reads from the
+                    # switches: the choice is made, it's read as it stands and the checklist goes on ("Packs 1 and 2,
+                    # off."). Asked as a question it waited on the captain, and the packs seemed never to be read.
+                    lines.append(f"{run._speakable(line.challenge)}, {shown[0]}.")
+                    pr.results[pr.index] = "ok"
+                    pr.index += 1
+                    continue
+                lines.append(f"{run._speakable(line.challenge)}?")
                 pr.asked_t, pr.repeats = t, 0
                 self._checklist_event(t, "waiting")
                 break
@@ -1743,7 +1748,9 @@ class Monitor(WatchMixin):
                 if info is not None:
                     w = info.weather
                     q = f", {'QNH' if self._region().icao else 'altimeter'} {speech.altimeter_display(w.altimeter_inhg)}" if w.altimeter_inhg else ""
-                    text += f" information {info.letter}, wind {speech.wind_display(w.wind)}{q}"
+                    # The temperature too: with the QNH and the wind, what the approach performance page wants.
+                    temp = f", temperature {round(w.temperature_c)}" if getattr(w, "temperature_c", None) is not None else ""
+                    text += f" information {info.letter}, wind {speech.wind_display(w.wind)}{q}{temp}"
                 text += "."
                 approach = a.approach or (f"{info.approach} runway {info.runway}" if info is not None and info.approach else None)
                 if approach:

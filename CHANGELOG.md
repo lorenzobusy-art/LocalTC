@@ -7,6 +7,10 @@ a new minor version adds features, a patch fixes them.
 ## [0.5.6] - Upcoming
 
 ### Added
+- **"Copilot: next frequency" on the ATC tab:** a button at the bottom left has the copilot put the frequency the flight
+  was sent to (by LocalTC's controller, the online network's, or LocalTC's after the network let it go) on COM1:
+  **Active** (the old one goes to standby) or **Standby** only, for the pilot to flip. The choice is remembered.
+- **The arrival briefing gives the temperature** with the QNH and the wind: what the approach performance page wants.
 - **The online controller's taxi on the Live Map:** in the VATSIM / IVAO hybrid mode, a box at the bottom left of the
   map takes, for the departure and for the arrival, the runway, the holding point and the taxiways the network's
   controller gave ("35R", "GE", "M C H GE"). LocalTC routes along those taxiways from where the aircraft is and draws
@@ -124,6 +128,24 @@ a new minor version adds features, a patch fixes them.
   instead of ATC's "say again".
 
 ### Fixed
+- **The descent comes before the FMS's top of descent:** never later than 3 nm a thousand feet plus 10 nm to slow down
+  (the plan's top of descent, measured from the field, came after the Fenix's). "Ready for descent" asks for it; it got
+  "maintain FL360".
+- **Vectored arrivals get down and slow down in time:**
+  - an aircraft flying in on a straight-in is turned onto the final at 30 degrees once it's inside the base's miles. At
+    Genoa's 28, 14 nm out, it was sent out on a downwind (heading 102, the final's reciprocal);
+  - vectored off a STAR with published speeds (IDON1J, 200 kt), approach gives its own reductions, 250 and 210. They
+    were skipped, and the flight reached the final at 280 kt.
+- **On the ground, a network controller logging on is the copilot's to say** ("IVAO connection for this airspace:
+  LIRF_GND, set 121.9 on COM1"). LocalTC's clearance said "contact Fiumicino Clearance 121.9", and the pilot started the
+  clearance again with someone else.
+- **No "contact" said again to a pilot already on the new frequency** ("contact Roma Departure 130.9" from the tower
+  with COM1 on 130.9).
+- **The flight stops at the gate only once the batteries are off** (BAT 1 and 2, the Fenix's own switches; the sim's
+  master battery otherwise). Parked at the gate, it used to end before the parking checklist and the shutdown.
+- **A checklist item left to the captain and read from the switches is read as it stands** ("Packs 1 and 2, off.") and
+  the checklist goes on. Asked as a question ("Packs 1 and 2? Showing off."), it waited, and the packs seemed unread.
+- **"Expect LSE Yankee runway 28"** is the ILS read back.
 - **The Fenix's spoilers are read armed:** its speedbrake lever (`L:A_FC_SPEEDBRAKE`, 0 on ARM) is read, not the sim's
   SPOILERS ARMED, which never follows it. The taxi and landing checklists said "Spoilers? Shows not armed" with the
   lever on ARM.

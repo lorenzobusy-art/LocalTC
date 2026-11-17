@@ -901,7 +901,6 @@
 "Stop": "Parar",
 "Stop sharing": "Dejar de compartir",
 "Stop sharing this flight? The link stops working; sharing it again makes a new one.": "¿Dejar de compartir este vuelo? El enlace deja de funcionar; volver a compartirlo crea uno nuevo.",
-"Stop the flight at the gate: once parked at a gate or stand at the destination (stopped, taxi done), the flight ends as if you pressed Stop": "Terminar el vuelo en la puerta: una vez estacionado en una puerta o puesto en el destino (parado, rodaje terminado), el vuelo termina como si hubieras pulsado Parar",
 "Stopping ...": "Parando ...",
 "Support": "Soporte",
 "Support & feedback": "Soporte y comentarios",
@@ -1585,5 +1584,15 @@
 "Departure taxiways": "Calles de rodaje de salida",
 "Holding point": "Punto de espera",
 "Taxiways: AE B BT": "Calles de rodaje: AE B BT",
-"Where to hold short on the way in: a runway (16L) or a taxiway": "Dónde esperar en el rodaje de llegada: una pista (16L) o una calle de rodaje"
+"Where to hold short on the way in: a runway (16L) or a taxiway": "Dónde esperar en el rodaje de llegada: una pista (16L) o una calle de rodaje",
+"Active": "Activa",
+"Copilot: next frequency": "Copiloto: siguiente frecuencia",
+"Copilot: {0}": "Copiloto: {0}",
+"How the copilot sets it": "Cómo la pone el copiloto",
+"In standby only: you flip it": "Solo en standby: la cambias tú",
+"No new frequency to set": "No hay frecuencia nueva que poner",
+"On COM1 active, the old one to standby": "En COM1 activa, la anterior a standby",
+"Standby": "Standby",
+"Stop the flight at the gate: once parked at a gate or stand at the destination and the batteries are switched off (BAT 1 and 2), the flight ends as if you pressed Stop": "Terminar el vuelo en la puerta: aparcado en una puerta o stand en el destino y con las baterías apagadas (BAT 1 y 2), el vuelo termina como si pulsaras Stop",
+"The copilot sets the frequency you've been sent to (by LocalTC or the online network)": "El copiloto pone la frecuencia a la que te han enviado (LocalTC o la red en línea)"
 }

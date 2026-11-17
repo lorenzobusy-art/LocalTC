@@ -70,7 +70,8 @@ def test_said_done_at_once_when_the_captain_answers_with_it_set():
     assert " ".join(said(out)) == "Parking brake, set. Takeoff speeds and thrust?"
 
 
-def test_the_captains_setting_is_asked_with_what_it_shows_and_tcas_set_by_the_copilot():
+def test_the_captains_setting_is_read_as_it_shows_and_tcas_set_by_the_copilot():
+    """An item left to the captain (PACKS 1 & 2 ... AS RQRD) and read from the switches: said as it stands, and on."""
     pm, _ = fenix()
     pm.observe(PhaseChanged(t=0.5, previous="TAXI_OUT", phase="RUNWAY_HOLD"))
     pm.observe(systems(0.6))
@@ -80,7 +81,7 @@ def test_the_captains_setting_is_asked_with_what_it_shows_and_tcas_set_by_the_co
     pm.observe(IntercomHeard(t=2, text="line up checklist"))
     out = pm.observe(IntercomHeard(t=3, text="one six right, both"))
     words = " ".join(said(out))
-    assert words == "TCAS, TA or TA/RA, set. Packs 1 and 2? Showing 1 on, 2 off."
+    assert words == "TCAS, TA or TA/RA, set. Packs 1 and 2, 1 on, 2 off. Line-up checklist complete."
     assert [o for o in out if isinstance(o, SetSimVar) and o.name == "L:S_XPDR_MODE" and o.value == 2]
 
 

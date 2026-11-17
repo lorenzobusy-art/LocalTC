@@ -75,23 +75,33 @@ def test_the_gate_radius_is_the_pilots():
     assert engine._gate_at(engine.geometry("CYUL"), off) is not None
 
 
-def test_the_session_stops_once_on_arrival():
+def test_the_session_stops_at_the_gate_once_the_batteries_are_off():
+    """Parked at the gate is not the end: the flight goes on (parking checklist, deboarding) until BAT 1 and 2 are off
+    (the Fenix's own switches), or the sim's master battery for an aircraft without them."""
     from localtc.app import _stop_at_gate
+    from localtc.sim_api import AircraftSystems, AircraftVars
 
-    async def run() -> bool:
+    async def run(off_event) -> tuple[bool, bool, bool]:
         bus = EventBus()
         arrived = asyncio.Event()
-        task = asyncio.create_task(_stop_at_gate(bus.subscribe(FlightArrived, AtcAlert), arrived, 0.0))
+        task = asyncio.create_task(_stop_at_gate(bus.subscribe(FlightArrived, AircraftSystems, AircraftVars, AtcAlert),
+                                                 arrived, 0.0))
         await asyncio.sleep(0)
         bus.publish(AtcAlert(t=1.0, kind="taxi_without_clearance", detail=""))
+        bus.publish(AircraftSystems(t=1.5, battery=True))
         await asyncio.sleep(0.01)
         early = arrived.is_set()
         bus.publish(FlightArrived(t=2.0, airport="CYUL", gate="Gate 12"))
+        await asyncio.sleep(0.01)
+        parked = arrived.is_set()
+        bus.publish(off_event)
         await asyncio.wait_for(task, 1.0)
         bus.close()
-        return not early and arrived.is_set()
+        return early, parked, arrived.is_set()
 
-    assert asyncio.run(run())
+    assert asyncio.run(run(AircraftSystems(t=3.0, battery=False))) == (False, False, True)
+    fenix_off = AircraftVars(t=3.0, values={"L:S_OH_ELEC_BAT1": 0.0, "L:S_OH_ELEC_BAT2": 0.0})
+    assert asyncio.run(run(fenix_off)) == (False, False, True)
 
 
 @pytest.mark.parametrize(("setting", "default"), [("auto_stop_at_gate", True), ("auto_stop_in_replay", False)])

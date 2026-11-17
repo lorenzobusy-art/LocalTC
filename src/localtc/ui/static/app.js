@@ -617,6 +617,23 @@ const TaxiBox = {
     } catch (e) { note.textContent = e.message; }
   },
 };
+// The ATC tab's button: the copilot sets the next frequency, on COM1 active or in standby (remembered).
+const Tune = {
+  mode() { try { return localStorage.getItem("tune-mode") || "swap"; } catch { return "swap"; } },
+  show() { $$("#tune-mode [data-mode]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.mode === this.mode()))); },
+  async go() {
+    try {
+      const r = await api("radio/copilot_tune", { mode: this.mode() });
+      toast(r.done ? `Copilot: ${r.done}` : "No new frequency to set");
+    } catch (e) { toast(e.message, true); }
+  },
+};
+$("#btn-copilot-tune").onclick = () => Tune.go();
+$$("#tune-mode [data-mode]").forEach((b) => (b.onclick = () => {
+  try { localStorage.setItem("tune-mode", b.dataset.mode); } catch { /* this window only */ }
+  Tune.show();
+}));
+Tune.show();
 $$("#map-taxi .mt-row").forEach((row) => {
   $(".mt-show", row).onclick = () => TaxiBox.send(row);
   $(".mt-clear", row).onclick = () => { $$("input", row).forEach((i) => (i.value = "")); TaxiBox.send(row); };
@@ -2223,7 +2240,7 @@ const Settings = {
         <label class="check-row"><input type="checkbox" id="s-humanize" ${st.atc.humanize !== false ? "checked" : ""}> Natural speech: controllers and the other pilots now and then say "uh" as people do (more from a conversational controller, hardly any from a strict one or on a busy frequency). Only in what's said, never inside a number or in anything urgent</label>
         <label class="check-row"><input type="checkbox" id="s-callsign-check" ${st.atc.callsign_check ? "checked" : ""}> Callsign check: another flight's callsign gets "say again your callsign"</label>
         <label class="check-row"><input type="checkbox" id="s-taxi-ribbon" ${st.atc.taxi_guide ? "checked" : ""}> Taxi guidance: green arrows on the ground along the route ground gave you, a red stop bar short of a runway you aren't cleared onto or across. LocalTC puts its arrows in the sim's Community folder when you turn this on; they show from the sim's next start</label>
-        <label class="check-row"><input type="checkbox" id="s-auto-stop" ${st.session.auto_stop_at_gate ? "checked" : ""}> Stop the flight at the gate: once parked at a gate or stand at the destination (stopped, taxi done), the flight ends as if you pressed Stop</label>
+        <label class="check-row"><input type="checkbox" id="s-auto-stop" ${st.session.auto_stop_at_gate ? "checked" : ""}> Stop the flight at the gate: once parked at a gate or stand at the destination and the batteries are switched off (BAT 1 and 2), the flight ends as if you pressed Stop</label>
         <div class="row"><label>Phraseology
           <select id="s-phraseology">${[["auto", "By region: FAA in the US and Canada, ICAO elsewhere"], ["faa", "FAA everywhere"], ["icao", "ICAO everywhere"]]
             .map(([v, t]) => `<option value="${v}" ${st.atc.phraseology === v ? "selected" : ""}>${t}</option>`).join("")}</select>
