@@ -1,0 +1,145 @@
+# The Airbus A320 family normal checklist (the QRH's, as airbus_a320.toml) for the Fenix A319/A320/A321, each item the
+# copilot can see read from the Fenix's own switches (its L:S_... variables: crew/profiles/fenix_a32x.toml says what
+# their positions are). An item it can see and finds done is said done ("Beacon, on."); one not done yet is said
+# ("Beacon? Shows off, still to do.") and the checklist waits for it. What it can't see (the briefing, the ECAM, the
+# cabin) is the captain's to answer.
+#
+# An item: ["CHALLENGE", "RESPONSE"], or a table: ``when`` the switches that make it right ("L:X == 1 & L:Y == 1"),
+# ``shows`` the switches said for what it's at, by ``states`` (their positions' names) or ``labels`` (several buttons:
+# the lit one's name), ``wrong`` what it's at when it isn't right.
+[set]
+name = "Fenix A320 family"
+source = "Airbus A320 family normal checklist (QRH), read against the Fenix's switches"
+match = ["Fenix", "FNX"]
+
+[[list]]
+id = "cockpit_prep"
+name = "Cockpit preparation"
+phase = "cockpit_prep"
+items = [
+  ["GEAR PINS & COVERS", "REMOVED"],
+  ["FUEL QUANTITY", "{fuel}"],
+  { item = "SEAT BELTS", result = "ON", when = "L:S_OH_SIGNS == 1" },
+  { item = "ADIRS", result = "NAV", when = "L:S_OH_NAV_IR1_MODE == 1 & L:S_OH_NAV_IR2_MODE == 1 & L:S_OH_NAV_IR3_MODE == 1", shows = ["L:S_OH_NAV_IR1_MODE", "L:S_OH_NAV_IR2_MODE", "L:S_OH_NAV_IR3_MODE"], states = ["off", "nav", "att"] },
+  ["BARO REF", "{altimeter} (BOTH)"],
+]
+
+[[list]]
+id = "before_start"
+name = "Before start"
+phase = "before_start"
+items = [
+  { item = "PARKING BRAKE", result = "SET", when = "L:S_MIP_PARKING_BRAKE == 1", wrong = "released" },
+  ["T.O SPEEDS & THRUST", "{speeds} (BOTH)"],
+  ["WINDOWS / DOORS", "CLOSED (BOTH)"],
+  { item = "BEACON", result = "ON", when = "L:S_OH_EXT_LT_BEACON == 1" },
+]
+
+[[list]]
+id = "after_start"
+name = "After start"
+phase = "after_start"
+items = [
+  { item = "ANTI ICE", result = "___", shows = ["L:S_OH_PNEUMATIC_ENG1_ANTI_ICE", "L:S_OH_PNEUMATIC_ENG2_ANTI_ICE"], states = ["off", "on"] },
+  ["ECAM STATUS", "CHECKED"],
+  ["PITCH TRIM", "___ %"],
+  ["RUDDER TRIM", "ZERO"],
+]
+
+[[list]]
+id = "taxi"
+name = "Taxi"
+phase = "taxi"
+items = [
+  ["FLIGHT CONTROLS", "CHECKED (BOTH)"],
+  ["FLAP SETTING", "CONF {flaps} (BOTH)"],
+  { item = "RADAR & PRED W/S", result = "ON & AUTO", when = "L:S_WR_SYS != 1 & L:S_WR_PRED_WS == 1" },
+  { item = "ENG MODE SEL", result = "___", shows = "L:S_ENG_MODE", states = ["crank", "norm", "ignition start"] },
+  ["ECAM MEMO", "TO NO BLUE"],
+  { item = "- AUTO BRK", result = "MAX", when = "L:I_MIP_AUTOBRAKE_MAX_L > 0", shows = ["L:I_MIP_AUTOBRAKE_LO_L", "L:I_MIP_AUTOBRAKE_MED_L", "L:I_MIP_AUTOBRAKE_MAX_L"], labels = ["LO", "MED", "MAX"] },
+  { item = "- SIGNS", result = "ON", when = "L:S_OH_SIGNS == 1 & L:S_OH_SIGNS_SMOKING >= 1" },
+  ["- CABIN", "READY"],
+  ["- SPLRS", "ARM"],
+  { item = "- FLAPS", result = "T.O", when = "L:S_FC_FLAPS >= 1 & L:S_FC_FLAPS <= 3", wrong = "up" },
+  ["- T.O CONFIG", "NORMAL"],
+]
+
+[[list]]
+id = "line_up"
+name = "Line-up"
+phase = "line_up"
+items = [
+  ["T.O RWY", "{runway} (BOTH)"],
+  { item = "TCAS", result = "TA OR TA/RA", when = "L:S_XPDR_MODE >= 1", shows = "L:S_XPDR_MODE", states = ["standby", "TA", "TA/RA"] },
+  { item = "PACKS 1 & 2", result = "___", shows = ["L:S_OH_PNEUMATIC_PACK_1", "L:S_OH_PNEUMATIC_PACK_2"], states = ["off", "on"] },
+]
+
+[[list]]
+id = "after_takeoff"
+name = "After takeoff"
+phase = "after_takeoff"
+items = [
+  ["LDG GEAR", "UP"],
+  { item = "FLAPS", result = "RETRACTED", when = "L:S_FC_FLAPS == 0", wrong = "not retracted" },
+  { item = "PACKS", result = "ON", when = "L:S_OH_PNEUMATIC_PACK_1 == 1 & L:S_OH_PNEUMATIC_PACK_2 == 1", shows = ["L:S_OH_PNEUMATIC_PACK_1", "L:S_OH_PNEUMATIC_PACK_2"], states = ["off", "on"] },
+]
+
+[[list]]
+id = "approach"
+name = "Approach"
+phase = "approach"
+items = [
+  ["BRIEFING", "CONFIRMED"],
+  ["ECAM STATUS", "CHECKED"],
+  { item = "SEAT BELTS", result = "ON", when = "L:S_OH_SIGNS == 1" },
+  ["BARO REF", "{altimeter} (BOTH)"],
+  ["MINIMUM", "___ (BOTH)"],
+  { item = "AUTO BRAKE", result = "___", shows = ["L:I_MIP_AUTOBRAKE_LO_L", "L:I_MIP_AUTOBRAKE_MED_L", "L:I_MIP_AUTOBRAKE_MAX_L"], labels = ["LO", "MED", "MAX"] },
+  { item = "ENG MODE SEL", result = "___", shows = "L:S_ENG_MODE", states = ["crank", "norm", "ignition start"] },
+]
+
+[[list]]
+id = "landing"
+name = "Landing"
+phase = "landing"
+items = [
+  ["ECAM MEMO", "LDG NO BLUE"],
+  ["- LDG GEAR", "DN"],
+  { item = "- SIGNS", result = "ON", when = "L:S_OH_SIGNS == 1 & L:S_OH_SIGNS_SMOKING >= 1" },
+  ["- CABIN", "READY"],
+  ["- SPLRS", "ARM"],
+  { item = "- FLAPS", result = "SET", when = "L:S_FC_FLAPS >= 3", shows = "L:S_FC_FLAPS", states = ["up", "1", "2", "3", "full"] },
+]
+
+[[list]]
+id = "after_landing"
+name = "After landing"
+phase = "after_landing"
+items = [
+  { item = "RADAR & PRED W/S", result = "OFF", when = "L:S_WR_SYS == 1 & L:S_WR_PRED_WS == 0" },
+]
+
+[[list]]
+id = "parking"
+name = "Parking"
+phase = "parking"
+items = [
+  { item = "APU BLEED", result = "ON", when = "L:S_OH_PNEUMATIC_APU_BLEED == 1" },
+  { item = "ENGINES", result = "OFF", when = "L:S_ENG_MASTER_1 == 0 & L:S_ENG_MASTER_2 == 0", wrong = "a master still on" },
+  { item = "SEAT BELTS", result = "OFF", when = "L:S_OH_SIGNS == 0" },
+  ["EXT LT", "___"],
+  { item = "FUEL PUMPS", result = "OFF", wrong = "some still on", when = "L:S_OH_FUEL_LEFT_1 == 0 & L:S_OH_FUEL_LEFT_2 == 0 & L:S_OH_FUEL_CENTER_1 == 0 & L:S_OH_FUEL_CENTER_2 == 0 & L:S_OH_FUEL_RIGHT_1 == 0 & L:S_OH_FUEL_RIGHT_2 == 0" },
+  { item = "PARK BRK & CHOCKS", result = "___", shows = "L:S_MIP_PARKING_BRAKE", states = ["brake released", "brake set"] },
+]
+
+[[list]]
+id = "securing"
+name = "Securing the aircraft"
+phase = "securing"
+items = [
+  { item = "OXYGEN", result = "OFF", when = "L:S_OH_OXYGEN_CREW_OXYGEN == 0" },
+  { item = "EXT LT", result = "OFF", wrong = "some still on", when = "L:S_OH_EXT_LT_BEACON == 0 & L:S_OH_EXT_LT_STROBE == 0 & L:S_OH_EXT_LT_NAV_LOGO == 0 & L:S_OH_EXT_LT_NOSE == 0 & L:S_OH_EXT_LT_LANDING_L <= 1 & L:S_OH_EXT_LT_LANDING_R <= 1" },
+  { item = "APU BLEED", result = "OFF", when = "L:S_OH_PNEUMATIC_APU_BLEED == 0" },
+  ["EFBs", "OFF"],
+  { item = "BAT", result = "OFF", when = "L:S_OH_ELEC_BAT1 == 0 & L:S_OH_ELEC_BAT2 == 0", wrong = "a battery still on" },
+]

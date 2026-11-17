@@ -113,7 +113,7 @@ def test_a_switch_that_doesnt_move_is_asked_of_the_pilot_not_said_as_done():
     see it on this aircraft. Check it." The call waits for the switch; the pilot's asked for one that didn't move."""
     from localtc.crew.pm import CHECK_S
 
-    pm = crew()
+    pm = crew(checklist_setting="off")  # (the after takeoff checklist would be offered first)
     pm.observe(PhaseChanged(t=0.5, previous="TAKEOFF", phase="DEPARTURE"))
     pm.observe(systems(0.6, seatbelt=True))
     out = fly(pm, [own(1 + i, on_ground=False, alt_agl_ft=9000 + 200 * i, alt_indicated_ft=9500 + 200 * i,
@@ -213,13 +213,13 @@ def test_the_airbus_line_up_checklist_is_its_real_one_challenge_and_response():
 
 
 def test_an_item_the_aircraft_shows_wrong_holds_the_checklist():
+    """Not done yet: said so as it's read ("still to do"), and the checklist goes on by itself once it's done."""
     pm = crew()
     pm.observe(PhaseChanged(t=0.5, previous="PARKED", phase="PARKED"))
     pm.observe(systems(0.6, light_beacon=False))
     pm.observe(own(1, parking_brake=False))
-    assert said(pm.observe(IntercomHeard(t=2, text="before start checklist")))[0] == "Before start checklist. Parking brake?"
-    out = pm.observe(IntercomHeard(t=3, text="set"))
-    assert said(out) == ["Parking brake shows released. Holding the checklist till it's right."]
+    assert said(pm.observe(IntercomHeard(t=2, text="before start checklist"))) == [
+        "Before start checklist. Parking brake? Shows released, still to do."]
     out = fly(pm, [own(4 + i, parking_brake=True) for i in range(6)])
     assert " ".join(said(out)).startswith("Parking brake, set. Takeoff speeds and thrust?")
     out = pm.observe(IntercomHeard(t=20, text="skip"))
@@ -381,7 +381,7 @@ def test_a_whole_recorded_flight_with_the_copilot_listening():
 
 def test_standard_is_set_at_the_transition_even_with_a_qnh_of_1013():
     """QNH 1013 reads 29.92: it was taken for standard already, and nothing was set."""
-    pm = crew()
+    pm = crew(checklist_setting="off")  # (the after takeoff checklist would be offered first)
     pm.observe(PhaseChanged(t=0.5, previous="TAKEOFF", phase="DEPARTURE"))
     pm.observe(systems(0.6))
     out = fly(pm, [own(1 + i, on_ground=False, alt_agl_ft=17000 + 300 * i, alt_indicated_ft=17500 + 300 * i,
@@ -415,7 +415,7 @@ def test_a_held_item_answered_with_what_the_aircraft_shows_goes_on():
     pm.observe(IntercomHeard(t=2, text="before start checklist"))
     pm.observe(IntercomHeard(t=3, text="set"))  # held: it shows released
     out = pm.observe(IntercomHeard(t=5, text="can we continue the checklist?"))
-    assert said(out) in (["Parking brake?"], ["Parking brake on?"], ["Brakes set?"])
+    assert said(out) == ["Parking brake? Shows released, still to do."]
     out = pm.observe(IntercomHeard(t=7, text="released"))
     assert " ".join(said(out)).startswith("Parking brake released.") and "complete" not in " ".join(said(out))
 

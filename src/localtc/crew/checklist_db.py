@@ -53,6 +53,19 @@ class Line:
     condition: tuple[str, str, float] | None = None
     action: tuple[str, int] | None = None
     note: bool = False  # a line to read, nothing to answer
+    # LocalTC's own reading of an aircraft's switches (a bundled checklist's ``when``, ``shows``): every one of
+    # ``checks`` holds when the item's as it should be ("ADIRS": the three IRs at NAV); ``shows``: the variables said
+    # for what it's at, by ``states`` (their values' names: "off", "nav", "att") or, for several, the ``labels`` of
+    # those on ("MAX"); ``wrong``: what it's at when it isn't (else said from the response: "off" for an "ON").
+    checks: tuple[tuple[str, str, float], ...] = ()
+    shows: tuple[str, ...] = ()
+    states: tuple[str, ...] = ()
+    labels: tuple[str, ...] = ()
+    wrong: str = ""
+
+    @property
+    def sensed_by_vars(self) -> bool:
+        return self.condition is not None or bool(self.checks) or bool(self.shows)
 
 
 @dataclass(frozen=True)
@@ -82,13 +95,14 @@ class ChecklistSet:
     def variables(self) -> tuple[str, ...]:
         """The aircraft's variables its conditions read (to watch while it's loaded)."""
         names = [ln.condition[0] for c in self.checklists for ln in c.lines if ln.condition]
+        names += [n for c in self.checklists for ln in c.lines for n in (*(v for v, _, _ in ln.checks), *ln.shows)]
         return tuple(dict.fromkeys(n for n in names if n.startswith("L:")))
 
     def to_json(self) -> dict:
         return {"name": self.name, "source": self.source, "origin": self.origin,
                 "checklists": [{"id": c.id, "name": c.name, "phase": c.phase,
                                 "lines": [{"challenge": ln.challenge, "response": ln.response, "note": ln.note,
-                                           "sensed": ln.condition is not None or sense_key(ln.challenge) is not None}
+                                           "sensed": ln.sensed_by_vars or sense_key(ln.challenge) is not None}
                                           for ln in c.lines]} for c in self.checklists]}
 
 
@@ -216,13 +230,42 @@ def from_msfs(folder: Path, name: str) -> ChecklistSet | None:
     return ChecklistSet(name, f"{name}'s own checklists (the sim's checklist)", "aircraft", tuple(lists)) if lists else None
 
 
+WHEN = re.compile(r"^\s*(L:[\w.]+)\s*(==|!=|>=|<=|>|<)\s*(-?[\d.]+)\s*$")
+
+
+def checks_of(when: str) -> tuple[tuple[str, str, float], ...]:
+    """ "L:S_OH_NAV_IR1_MODE == 1 & L:S_OH_NAV_IR2_MODE == 1" -> each (variable, comparison, value)."""
+    out = []
+    for part in when.split("&"):
+        m = WHEN.match(part)
+        if m is None:
+            raise ValueError(f"not a check: {part!r} (L:VAR == 1)")
+        out.append((m.group(1), m.group(2), float(m.group(3))))
+    return tuple(out)
+
+
+def _bundled_line(item) -> Line:
+    """A bundled checklist's item: ["CHALLENGE", "RESPONSE"], or a table that also says how it's seen
+    ({item, result, when, shows, states, labels, wrong})."""
+    if isinstance(item, dict):
+        shows = item.get("shows", ())
+        return Line(str(item["item"]).lstrip("- ").strip(), str(item.get("result", "")),
+                    checks=checks_of(item["when"]) if item.get("when") else (),
+                    shows=(shows,) if isinstance(shows, str) else tuple(shows),
+                    states=tuple(str(s) for s in item.get("states", ())),
+                    labels=tuple(str(s) for s in item.get("labels", ())), wrong=str(item.get("wrong", "")),
+                    note=bool(item.get("note", False)))
+    a, b = item
+    return Line(a.lstrip("- ").strip(), b)
+
+
 def bundled(folder: Path = BUNDLED) -> list[ChecklistSet]:
     out = []
     for path in sorted(folder.glob("*.toml")):
         data = tomllib.loads(path.read_text(encoding="utf-8"))
         s = data.get("set", {})
-        lists = tuple(Checklist(c["id"], c["name"], c["phase"],
-                                tuple(Line(a.lstrip("- ").strip(), b) for a, b in c["items"])) for c in data.get("list", []))
+        lists = tuple(Checklist(c["id"], c["name"], c["phase"], tuple(_bundled_line(i) for i in c["items"]))
+                      for c in data.get("list", []))
         out.append(ChecklistSet(s["name"], s["source"], "manufacturer", lists, tuple(s.get("match", ()))))
     return out
 

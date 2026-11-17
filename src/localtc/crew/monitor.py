@@ -1548,16 +1548,31 @@ class Monitor(WatchMixin):
                     pr.held, pr.asked_t = True, t
                     self._checklist_event(t, "held")
                     break
-                if mine or mode in ("read", "auto") or (shown is not None and shown[1] is True and mode != "challenge"):
+                # Challenge and response, an item the aircraft shows (its own switches read, or an aircraft with a
+                # profile of its own): already done, the copilot says so from the aircraft and reads on; not yet, it
+                # says what it's at and waits for it (the checklist goes on by itself once it's right).
+                seen_here = shown is not None and shown[1] is not None and (
+                    line.sensed_by_vars or self.c.profile.name != "stock")
+                if mine or mode in ("read", "auto") or (seen_here and shown[1] is True):
                     words = run.say(line, values)
-                    if shown is not None and "?" in words:
+                    if shown is not None and ("?" in words or line.sensed_by_vars):
                         words = f"{run._speakable(line.challenge)}, {shown[0]}."
                     lines.append(words)
                     pr.results[pr.index] = "ok" if shown is not None and shown[1] is not False else "read"
                     pr.index += 1
                     continue
-                # Challenge and response: the captain's item asked, and waited for.
-                lines.append(f"{run._speakable(line.challenge)}?")
+                if seen_here and shown[1] is False:
+                    lines.append(f"{run._speakable(line.challenge)}? Shows {shown[0]}, still to do.")
+                    pr.held, pr.asked_t, pr.repeats = True, t, 0
+                    self._checklist_event(t, "held")
+                    break
+                # Challenge and response: the captain's item asked, and waited for (with what its switches are at,
+                # when the copilot reads them and the checklist leaves the setting to the captain: "Packs 1 and 2?
+                # Showing on.").
+                if shown is not None and shown[1] is None and line.sensed_by_vars:
+                    lines.append(f"{run._speakable(line.challenge)}? Showing {shown[0]}.")
+                else:
+                    lines.append(f"{run._speakable(line.challenge)}?")
                 pr.asked_t, pr.repeats = t, 0
                 self._checklist_event(t, "waiting")
                 break
@@ -1604,6 +1619,14 @@ class Monitor(WatchMixin):
             pr.results[pr.index] = "ok"
             pr.index += 1
             self._advance(t, opener="Copy.")
+            return True
+        if pr.held and shown is not None and shown[1] is not False:
+            # Done as it was said ("set", with the brake just set): on at once, not after the next look.
+            pr.held = False
+            pr.results[pr.index] = "ok"
+            pr.index += 1
+            with regions.speaking(self._region()):
+                self._advance(t, opener=f"{run._speakable(line.challenge)}, {shown[0]}.")
             return True
         if pr.held:
             return False

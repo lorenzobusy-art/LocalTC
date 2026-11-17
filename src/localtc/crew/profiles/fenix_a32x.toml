@@ -4,11 +4,16 @@
 # the sim 2026-10-08): the light switches (the sim's LIGHT variables follow them), and the FCU's encoders, which turn
 # by how much they change (+50 = 50 clicks) with nothing to read the windows back by, so they're turned past the
 # stop first. The heading knob has no stop: left to the pilot.
+#
+# Its switches' positions (L:S_..., from the tooltips and sounds of its cockpit's behaviours, the package's
+# Cockpit_Behavior.xml and Panel_*_Behavior.xml): a toggle 0 off / 1 on (the parking brake 1 set), a pushbutton 1 pushed
+# in (ON, AUTO), the IRs 0 off / 1 NAV / 2 ATT, the engine mode 0 CRANK / 1 NORM / 2 IGN START, the TCAS mode 0 STBY /
+# 1 TA / 2 TA/RA, the radar's SYS 0 "1" / 1 OFF / 2 "2", the flap lever 0-4. Its normal checklist reads them
+# (checklist_data/fenix_a32x.toml).
 [aircraft]
 name = "Fenix Airbus"
 match = ["Fenix", "FNX"]
 reads_autopilot = false
-reads_flaps = false     # the sim's flap handle index doesn't follow the lever
 flaps = "detents"
 detents = ["up", "1", "2", "3", "full"]
 aliases = { "one plus f" = "1", "1 plus f" = "1", "1+f" = "1", "config full" = "full", "zero" = "up", "0" = "up" }
@@ -25,7 +30,29 @@ landing_detent = "3"
 reversers = true
 ceiling_ft = 39000
 cannot = ["heading", "vs", "autopilot", "com_standby", "spoilers"]   # no way found yet (spoilers: the lever is an axis)
-unread = ["light_landing", "ap_speed_sel", "ap_altitude_sel"]
+unread = ["ap_speed_sel", "ap_altitude_sel", "xpdr_mode"]   # (the sim's transponder state: not its TCAS knob)
+
+# What the copilot sees by: its own switches (the sim's flap handle index doesn't follow the lever, nor the sim's
+# landing light the landing lights).
+[reads]
+flaps_index = "L:S_FC_FLAPS"
+flaps_positions = "4"
+seatbelt = "L:S_OH_SIGNS >= 1"
+light_landing = "L:S_OH_EXT_LT_LANDING_L >= 2"   # 0 retract, 1 off, 2 on
+
+[actions.seatbelt]
+lvar = "L:S_OH_SIGNS"
+on = 1
+off = 0
+
+# The TCAS mode knob (the checklist's "TCAS ... TA OR TA/RA").
+[actions.transponder_alt]
+lvar = "L:S_XPDR_MODE"
+on = 2
+
+[actions.transponder_standby]
+lvar = "L:S_XPDR_MODE"
+on = 0
 
 [actions.light_beacon]
 lvar = "L:S_OH_EXT_LT_BEACON"

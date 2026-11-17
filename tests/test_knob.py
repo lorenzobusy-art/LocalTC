@@ -70,15 +70,20 @@ def test_the_fenix_fcu_is_turned_past_its_stop_then_up():
     assert plan(Command("speed", "250"), c).check(c) is None  # nothing reads the Fenix's FCU back: sent, not checked
 
 
-def test_a_switch_each_side_is_two_writes_and_an_unread_light_isnt_checked():
-    from localtc.crew.actions import Cockpit, plan
+def test_a_switch_each_side_is_two_writes_checked_by_the_aircrafts_own_switch():
+    from localtc.crew.actions import Cockpit, as_read, plan
     from localtc.crew.commands import Command
     from localtc.sim_api import AircraftSystems
 
-    c = Cockpit(profile=_fenix(), systems=AircraftSystems(t=0.0, light_landing=True))
+    # The sim's landing light is the Fenix's nose T.O. light: on, with the landing lights off (1) by their own switch.
+    c = Cockpit(profile=_fenix(), vars={"L:S_OH_EXT_LT_LANDING_L": 1.0})
+    c.systems = as_read(AircraftSystems(t=0.0, light_landing=True), c.profile, c.vars)
     got = plan(Command("light", "on", "landing"), c)
     assert [w.name for w in got.writes] == ["L:S_OH_EXT_LT_LANDING_L", "L:S_OH_EXT_LT_LANDING_R"]
-    assert got.check(c) is None and not got.already  # the sim's landing light is the Fenix's nose T.O. light
+    assert got.check(c) is False
+    c.vars["L:S_OH_EXT_LT_LANDING_L"] = 2.0
+    c.systems = as_read(c.systems, c.profile, c.vars)
+    assert got.check(c) is True
 
 
 def test_what_an_aircraft_cant_do_is_the_pilots_from_the_start():

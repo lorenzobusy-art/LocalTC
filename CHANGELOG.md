@@ -7,6 +7,17 @@ a new minor version adds features, a patch fixes them.
 ## [0.5.6] - Upcoming
 
 ### Added
+- **The Fenix A319/A320/A321's checklists read its cockpit:** the copilot reads the Airbus normal checklist (the
+  QRH's) against the Fenix's own switches: the ADIRS, parking brake, beacon, signs, radar and predictive windshear,
+  autobrake, flaps, TCAS, packs, engine masters and mode selector, APU bleed, fuel pumps, exterior lights, crew oxygen
+  and batteries. An item already done is said done from the aircraft ("Parking brake, set.") and the checklist reads
+  on; one not done yet is said ("Beacon? Shows off, still to do.") and the checklist goes on by itself once it's
+  right; an item left to the captain is asked with what it shows ("Packs 1 and 2? Showing on."). The Fenix's flap
+  lever, seatbelt sign and landing lights are now read from its own switches (the sim's didn't follow them), and the
+  TCAS and seatbelt sign the copilot sets move its own knobs. In challenge and response, any aircraft's item the
+  copilot can see already done is said done, not asked.
+- **After takeoff checklist for the A320 family:** landing gear up, flaps retracted, packs on (the QRH's), offered
+  once the flaps are up.
 - **Your callsign, said your way:** under the callsign on the ATC tab, "Callsign said as" shows how ATC says it, and
   you can write it as it should be said ("ita arrow 1128" for a virtual airline's VND1128, instead of letters or
   "eleven twenty-eight"). A number in it is said digit by digit, ATC hears you when you say it so, and it's kept for

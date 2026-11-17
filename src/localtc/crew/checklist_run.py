@@ -77,6 +77,10 @@ def seen(line: Line, c: Cockpit, values: dict[str, str]) -> tuple[str, bool | No
         if value is not None:
             ok = OPS.get(op, OPS["=="])(value, want)
             return ("as it should be" if ok else "not as it should be"), ok
+    if line.checks or line.shows:
+        got = _by_vars(line, c, values)
+        if got is not None:
+            return got
     key = sense_key(line.challenge)
     if key is None or c.own is None:
         return None
@@ -135,6 +139,49 @@ def seen(line: Line, c: Cockpit, values: dict[str, str]) -> tuple[str, bool | No
     if key == "fuel":
         return (values.get("fuel") or None, True) if values.get("fuel") else None
     return None
+
+
+def _by_vars(line: Line, c: Cockpit, values: dict[str, str]) -> tuple[str, bool | None] | None:
+    """An item seen by the aircraft's own switches (a bundled checklist's ``when`` / ``shows``): what it's at, and
+    whether that's as the checklist wants it; None until the variables have been read."""
+    readings = [_read(var, c) for var, _, _ in line.checks]
+    ok = None
+    if line.checks and all(r is not None for r in readings):
+        ok = all(OPS.get(op, OPS["=="])(r, want) for (_, op, want), r in zip(line.checks, readings))
+    state = _state(line, c)
+    if ok is None:
+        return (state, None) if state else None
+    if state:
+        return state, ok
+    if ok:
+        response = fill(line.response, values)
+        said = "" if "___" in response else _speakable(re.sub(r"\(BOTH\)", "", response)).rstrip(" .").lower()
+        return said or "checked", True
+    if line.wrong:
+        return line.wrong, False
+    want = wanted_on(fill(line.response, values))
+    return ("off" if want else "on" if want is False else "not as it should be"), False
+
+
+def _state(line: Line, c: Cockpit) -> str:
+    """The item's switches in words ("nav"; "1 on, 2 off"; "MAX"), "" when not read yet or not said."""
+    if not line.shows:
+        return ""
+    readings = [_read(var, c) for var in line.shows]
+    if any(r is None for r in readings):
+        return ""
+    if line.labels:  # several buttons, one lit: its name ("MAX"), or the first state ("off") with none
+        lit = [label for label, r in zip(line.labels, readings) if r and r > 0]
+        return " ".join(lit) if lit else (line.states[0] if line.states else "off")
+
+    def name(r: float) -> str:
+        i = int(round(r))
+        return line.states[i] if 0 <= i < len(line.states) else f"{r:g}"
+
+    names = [name(r) for r in readings]
+    if len(set(names)) == 1:
+        return names[0]
+    return ", ".join(f"{i} {n}" for i, n in enumerate(names, start=1))
 
 
 def fix_for(line: Line, c: Cockpit, values: dict[str, str]) -> Command | None:

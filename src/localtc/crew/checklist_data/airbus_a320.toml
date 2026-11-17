@@ -3,7 +3,8 @@
 [set]
 name = "Airbus A320 family"
 source = "Airbus A320 family normal checklist (QRH)"
-match = ["A318", "A319", "A320", "A321", "A19N", "A20N", "A21N", "Fenix", "FSLabs", "FSL A3"]
+# (The Fenix has its own copy, read against its switches: fenix_a32x.toml.)
+match = ["A318", "A319", "A320", "A321", "A19N", "A20N", "A21N", "FSLabs", "FSL A3"]
 
 [[list]]
 id = "cockpit_prep"
@@ -65,6 +66,16 @@ items = [
   ["T.O RWY", "{runway} (BOTH)"],
   ["TCAS", "TA OR TA/RA"],
   ["PACKS 1 & 2", "___"],
+]
+
+[[list]]
+id = "after_takeoff"
+name = "After takeoff"
+phase = "after_takeoff"
+items = [
+  ["LDG GEAR", "UP"],
+  ["FLAPS", "RETRACTED"],
+  ["PACKS", "ON"],
 ]
 
 [[list]]

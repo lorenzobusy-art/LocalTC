@@ -361,7 +361,7 @@ def _plan(cmd: Command, c: Cockpit) -> Plan | str:  # noqa: C901 - one branch pe
     if a == "transponder":  # the mode: "alt" (TA/RA in an airliner), "on", "standby"
         state = {"standby": 1.0, "on": 3.0, "alt": 4.0}.get(v, 4.0)
         name = {"alt": "TA/RA", "on": "on", "standby": "standby"}.get(v, v)
-        write = _write(p, f"transponder_{v}", SetSimVar(name="TRANSPONDER STATE:1", unit="Enum", value=state))
+        write = _write(p, f"transponder_{v}", SetSimVar(name="TRANSPONDER STATE:1", unit="Enum", value=state), on=True)
         return Plan(a, v, (write,), _own(lambda o: o.xpdr_mode == v), f"Transponder {name}.",
                     already=f"Transponder's already {name}.", reads="xpdr_mode")
     if a == "spoilers":
