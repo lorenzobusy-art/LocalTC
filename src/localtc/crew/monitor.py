@@ -1024,8 +1024,11 @@ class Monitor(WatchMixin):
             # Cleared down at pilot's discretion ("when ready descend to 8,000"): level above it until the crew starts
             # down is the clearance, not a level forgotten ("We're cleared to FL080, still level at FL170").
             discretion = getattr(self.engine, "discretion_alt", None) == target and alt > target
+            # The level LocalTC found the flight at when it took it (back from IVAO, climbing on the network's
+            # clearance): no clearance of LocalTC's to hold the crew to ("Altitude! 600 high" before the first call).
+            taken = getattr(self.engine, "taken_alt", None) == target
             if self.captured != target and abs(alt - target) >= 1000 and abs(own.vs_fpm) < 300 and not via and not sid_climb \
-                    and not discretion \
+                    and not discretion and not taken \
                     and t - self.cleared_alt_t > LEVEL_BELOW_S and t - self.level_t > LEVEL_BELOW_S                     and self.phase in ("DEPARTURE", "CRUISE", "ARRIVAL"):
                 # Cleared to FL370 and still level at 350 an hour later (the selected altitude never reached the
                 # aircraft): the pilot monitoring says so. Level for a while, not a moment's level-off in the climb
@@ -1034,7 +1037,7 @@ class Monitor(WatchMixin):
                 self._nag(f"level_{where}:{target}", ROUTINE, t, f"We're cleared to {speech.altitude_display(target)}, "
                           f"still level at {speech.altitude_display(int(round(alt, -2)))}.", every_s=600,
                           valid=lambda: st.assignments.altitude_ft == target)
-            if self.captured == target and abs(alt - target) > 300 and not via:
+            if self.captured == target and abs(alt - target) > 300 and not via and not taken:
                 self.off_since = self.off_since or t
                 if t - self.off_since > 5:
                     off = round(abs(alt - target), -2)
@@ -1459,7 +1462,9 @@ class Monitor(WatchMixin):
                 continue
             if self.checklist_setting == "run":
                 self._start(cl, t)
-            elif self._call(f"prompt:{cl.id}", ROUTINE, t, [f"{cl.name} checklist?", f"{cl.name} checklist when you're ready."]):
+            elif self._call(f"prompt:{cl.id}", ROUTINE, t, [f"{cl.name} checklist?", f"{cl.name} checklist when you're ready."],
+                            valid=lambda cid=cl.id: cid not in self.f.checklists and self.progress is None):
+                # (Its turn come with the checklist already asked for and being read: not offered again.)
                 self.offer = Offer("checklist", cl.id, t + 45.0)
             return
 

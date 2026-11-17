@@ -172,6 +172,8 @@ def parse(text: str) -> list[Command]:
         return [Command("brief", which)]
     if any(re.search(rf"\b{re.escape(phrase)}\b", lowered) for phrase in STATUS) and len(lowered.split()) <= 6:
         return [Command("status")]
+    if re.search(r"\b(?:let'?s do (?:it|that|this|so)|let'?s go|go ahead|sure|please do|yes please)\W*$", lowered):
+        return [Command("yes")]  # "After start checklist?" - "Let's do it." (also after "Takeoff, check.")
     tokens = [t for t in normalize(text.replace("/", " ")) if t.text not in FILLER or t.kind == "number"]
     words = [t.text for t in tokens]
     if len(words) <= 3 and words and words[0] in YES:

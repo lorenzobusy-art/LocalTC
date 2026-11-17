@@ -53,6 +53,9 @@ def normalize(text: str) -> list[Token]:
     # "Niner" written "9R" ("flight level 0, 9R, 0"): the digit.
     lowered = re.sub(r"\b9r\b", "9", lowered)
     lowered = re.sub(r"\bexpector\b", "expect a", lowered)  # "expect a runway 35L" run together
+    # "Descend for 1,000 feet": "four thousand" written as "for" and a thousand.
+    lowered = re.sub(r"\b(descend|descending|climb|climbing|maintain|maintaining|to) for (?:1,000|1000|one thousand|thousand)\b",
+                     r"\1 4,000", lowered)
     lowered = _two_between_digits(lowered)
     lowered = re.sub(r"\b(?:an? )?(?:i less|eye less|i l s|i els|iless)\b", "an ils", lowered)  # "an I-less for 26 left"
     # "Runway 22 to the left" is speech-to-text's "22 left" (it was read as a pushback "tail left").

@@ -8,9 +8,12 @@ a new minor version adds features, a patch fixes them.
 
 ### Added
 - **The online controller's taxi on the Live Map:** in the VATSIM / IVAO hybrid mode, a box at the bottom left of the
-  map takes the runway and the taxiways the network's ground controller gave ("35R", "M C H GE"). LocalTC routes along
-  those taxiways from where the aircraft is (to the runway's holding point on the way out, to the gate or the nearest
-  parking on the way in) and draws the route as it draws its own, saying if a taxiway isn't on it. Clear takes it off.
+  map takes, for the departure and for the arrival, the runway, the holding point and the taxiways the network's
+  controller gave ("35R", "GE", "M C H GE"). LocalTC routes along those taxiways from where the aircraft is and draws
+  the route as it draws its own, saying if a taxiway or holding point isn't on it. Clear takes it off.
+  - Departure: to the runway's holding point on the taxiway given ("GE", or an intersection "A3").
+  - Arrival: to the gate given or the nearest parking, stopping at the holding point when there is one (a runway to
+    hold short of, "16L", or a taxiway). Typed in the air, it's kept and drawn once the aircraft has landed.
 - **The Fenix A319/A320/A321's checklists read its cockpit:** the copilot reads the Airbus normal checklist (the
   QRH's) against the Fenix's own switches: the ADIRS, parking brake, beacon, signs, radar and predictive windshear,
   autobrake, flaps, TCAS, packs, engine masters and mode selector, APU bleed, fuel pumps, exterior lights, crew oxygen
@@ -121,6 +124,17 @@ a new minor version adds features, a patch fixes them.
   instead of ATC's "say again".
 
 ### Fixed
+- **The Fenix's spoilers are read armed:** its speedbrake lever (`L:A_FC_SPEEDBRAKE`, 0 on ARM) is read, not the sim's
+  SPOILERS ARMED, which never follows it. The taxi and landing checklists said "Spoilers? Shows not armed" with the
+  lever on ARM.
+- **From a flight Malpensa to Fiumicino on IVAO:**
+  - "Let's do it", "go ahead", "sure" take the copilot's offer ("After start checklist?"). They were left unanswered;
+  - "Information B, QNH 1009" said back to approach needs no answer. It was taken for a question, and ATC gave the
+    ATIS and the QNH twice and a "say again";
+  - "Descend for 1,000 feet" (four thousand, as speech-to-text wrote it) is read back as 4,000;
+  - the level LocalTC finds a flight at when it takes it back from the network is no clearance of its own: no
+    "Altitude! 600 high" while the crew climbs on the network controller's clearance before its first call;
+  - a checklist offered is not offered again once it's being read ("Parking checklist?" in the middle of it).
 - **An online approach with a sector in its callsign** (IVAO's LIMC_ANE_APP) works that sector's outline round its
   airport (Milan's ANE, round Malpensa), not the one under the point the network gives for the controller (near
   Piacenza). With COM1 on Milan's 126.75 short of Turin, LocalTC's own Milan Approach answered over the IVAO

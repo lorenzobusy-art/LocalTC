@@ -1576,5 +1576,14 @@
 "Taxi given by the online controller": "Rullaggio dato dal controllore online",
 "Taxi route cleared": "Percorso di rullaggio cancellato",
 "Taxi route on the map": "Percorso di rullaggio sulla mappa",
-"Taxiways: M C H GE": "Taxiway: M C H GE"
+"Taxiways: M C H GE": "Taxiway: M C H GE",
+"Arrival holding point": "Punto attesa all'arrivo",
+"Arrival runway": "Pista di arrivo",
+"Arrival taxiways": "Taxiway all'arrivo",
+"Departure holding point": "Punto attesa alla partenza",
+"Departure runway": "Pista di partenza",
+"Departure taxiways": "Taxiway alla partenza",
+"Holding point": "Punto attesa",
+"Taxiways: AE B BT": "Taxiway: AE B BT",
+"Where to hold short on the way in: a runway (16L) or a taxiway": "Dove fermarsi prima, durante il rullaggio all'arrivo: una pista (16L) o una taxiway"
 }

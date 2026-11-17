@@ -1576,5 +1576,14 @@
 "Taxi given by the online controller": "Руление от онлайн-диспетчера",
 "Taxi route cleared": "Маршрут руления удалён",
 "Taxi route on the map": "Маршрут руления на карте",
-"Taxiways: M C H GE": "Рулёжки: M C H GE"
+"Taxiways: M C H GE": "Рулёжки: M C H GE",
+"Arrival holding point": "Место ожидания при прилёте",
+"Arrival runway": "Полоса прилёта",
+"Arrival taxiways": "Рулёжки при прилёте",
+"Departure holding point": "Место ожидания при вылете",
+"Departure runway": "Полоса вылета",
+"Departure taxiways": "Рулёжки при вылете",
+"Holding point": "Место ожидания",
+"Taxiways: AE B BT": "Рулёжки: AE B BT",
+"Where to hold short on the way in: a runway (16L) or a taxiway": "Где остановиться перед ней при рулении после посадки: полоса (16L) или рулёжка"
 }

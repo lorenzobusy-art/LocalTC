@@ -607,18 +607,21 @@ const TaxiBox = {
     const box = $("#map-taxi");
     if (box) box.hidden = !S.state?.online?.network;
   },
-  async send(runway, taxiways) {
-    const note = $("#mt-note");
+  async send(row) {
+    const note = $("#mt-note"), val = (c) => $(c, row).value.trim();
+    const args = { leg: row.dataset.leg, runway: val(".mt-rwy"), hold: val(".mt-hold"), taxiways: val(".mt-via") };
     try {
-      const r = await api("given_taxi", { runway, taxiways });
+      const r = await api("given_taxi", args);
       note.textContent = r.note || "";
-      if (!r.note) toast(runway || taxiways ? "Taxi route on the map" : "Taxi route cleared");
+      if (!r.note) toast(args.runway || args.hold || args.taxiways ? "Taxi route on the map" : "Taxi route cleared");
     } catch (e) { note.textContent = e.message; }
   },
 };
-$("#mt-show").onclick = () => TaxiBox.send($("#mt-rwy").value.trim(), $("#mt-via").value.trim());
-$("#mt-clear").onclick = () => { $("#mt-rwy").value = ""; $("#mt-via").value = ""; TaxiBox.send("", ""); };
-["#mt-rwy", "#mt-via"].forEach((sel) => $(sel).addEventListener("keydown", (e) => { if (e.key === "Enter") $("#mt-show").click(); }));
+$$("#map-taxi .mt-row").forEach((row) => {
+  $(".mt-show", row).onclick = () => TaxiBox.send(row);
+  $(".mt-clear", row).onclick = () => { $$("input", row).forEach((i) => (i.value = "")); TaxiBox.send(row); };
+  $$("input", row).forEach((i) => i.addEventListener("keydown", (e) => { if (e.key === "Enter") TaxiBox.send(row); }));
+});
 
 /* ---------- tabs and dialogs ---------- */
 

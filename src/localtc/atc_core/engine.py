@@ -677,6 +677,10 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
         # The level of a descent at pilot's discretion ("when ready descend to 8,000"): the crew starts down when they
         # choose, so staying level above it is no deviation. None once another level is given.
         self.discretion_alt: int | None = None
+        # The level a flight joined in flight (or handed back by VATSIM / IVAO) was found at: taken as its clearance, not
+        # one LocalTC gave, so the copilot doesn't call a climb from it (the network's clearance) a deviation. None once
+        # LocalTC gives a level.
+        self.taken_alt: int | None = None
         self._hazards_told: set[str] = set()
         self._ops_changed = False  # something in ``operations_json`` changed: an ``AtcOperations`` goes out
         self._conditions_changed = False
@@ -717,6 +721,7 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
         self._emergency_told: dict[str, Any] = {}  # what ATC's been told of the emergency: souls, fuel, what's wrong
         self._reaching_t: float | None = None  # when the climb got near the level a centre gave
         self._taxi_path: tuple[str, list[tuple[float, float]]] | None = None  # (airport, points) of the route ground gave
+        self._given_arrival: tuple[str, str, str] | None = None  # the online controller's taxi in, typed before landing
         self._deferred: Transcript | None = None  # the model missed it once: it gets a second, longer look
         self._deferred_facility: Facility | None = None  # ... asked of this controller
         self._patient = False  # answering that one now
@@ -766,27 +771,45 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
         if self.state.flight.callsign is not None:
             self.state.flight.callsign = self._own(getattr(self, "_own_given", None) or self.state.flight.callsign)
 
-    def set_given_taxi(self, runway: str, taxiways: str) -> str:
-        """A taxi route the pilot was given on the online network (IVAO, VATSIM), typed on the Live Map: "35R" and
-        "M C H GE". LocalTC routes along those taxiways from where the aircraft is (to the runway's holding point on the
-        way out, to the gate given or the nearest parking on the way in) and draws it on the map. Both empty: the
-        route is taken off. Returns what went wrong, or "" when it's drawn."""
-        names = tuple(n for n in re.split(r"[\s,;/.-]+", taxiways.upper()) if n and n != "VIA")
-        runway = runway.strip().upper().removeprefix("RWY").removeprefix("RUNWAY").strip()
-        if not names and not runway:
-            self._taxi_path = None
+    def set_given_taxi(self, runway: str, taxiways: str, hold: str = "", leg: str = "") -> str:
+        """A taxi the pilot was given on the online network (IVAO, VATSIM), typed on the Live Map: the runway, the
+        holding point and the taxiways ("35R", "GE", "M C H GE"). ``leg``: "departure" or "arrival" ("" for the one the
+        flight is in). On the way out LocalTC routes along the taxiways to the runway's holding point (on the holding
+        point's taxiway when given); on the way in, to the gate given or the nearest parking, stopping at the holding
+        point when there is one (a runway to hold short of, "16L", or a taxiway). An arrival typed in the air is kept
+        and drawn once the aircraft has landed. All empty: the route is taken off. Returns what went wrong, or ""."""
+        names = tuple(n for n in re.split(r"[\s,;/.]+", taxiways.upper()) if n and n != "VIA")
+        runway = runway.strip().upper().removeprefix("RUNWAY").removeprefix("RWY").strip()
+        hold = hold.strip().upper().removeprefix("HOLD SHORT").removeprefix("RUNWAY").removeprefix("RWY").strip(" OF")
+        arriving = self._arriving
+        leg = leg or ("arrival" if arriving else "departure")
+        if leg == "arrival":
+            self._given_arrival = (runway, taxiways, hold) if names or runway or hold else None
+            if runway and self.geometry(self.state.flight.destination) is not None \
+                    and self.geometry(self.state.flight.destination).end(runway) is not None:
+                self._assign(arrival_runway=runway)
+        if not names and not runway and not hold:
+            if (leg == "arrival") == arriving:
+                self._taxi_path = None
             return ""
         own, st = self.state.aircraft, self.state
+        if leg == "departure" and arriving:
+            return "the flight has landed: that's the arrival's"
         if own is None or not own.on_ground:
-            return "only on the ground"
-        icao = st.flight.destination if self._arriving else st.flight.origin
+            return "kept: drawn once you've landed" if leg == "arrival" else "only on the ground"
+        if leg == "arrival" and not arriving:
+            return "kept: drawn once you've landed"
+        icao = st.flight.destination if leg == "arrival" else st.flight.origin
         geo = self.geometry(icao)
         if geo is None:
             return f"no layout of {icao or 'this airport'} yet"
         graph = self._taxi_graph(geo)
-        if self._arriving:
-            spot = st.assignments.gate_index
-            route = graph.parking_route(own.lat, own.lon, spot, heading=own.hdg_true, via=names)
+        if leg == "arrival":
+            route = graph.parking_route(own.lat, own.lon, st.assignments.gate_index, heading=own.hdg_true, via=names)
+            if route is not None and hold:
+                route = self._held_at(geo, graph, route, hold)
+                if route is None:
+                    return f"no holding point at {hold} on that route"
         else:
             end = geo.end(runway) if runway else None
             if runway and end is None:
@@ -794,15 +817,32 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
             end = end or (geo.end(st.assignments.departure_runway) if st.assignments.departure_runway else None)
             if end is None:
                 return "the runway is needed"
-            route = graph.departure_route(own.lat, own.lon, end, via=names)
+            if hold and not any(h.runway is end.runway and any(e.name.upper() == hold for e in graph.edges.get(
+                    ("point", h.point.index), ())) for h in geo.hold_shorts):
+                return f"runway {end.ident} has no holding point on {hold}"
+            route = graph.departure_route(own.lat, own.lon, end, via=names, hold=hold)
             if route is not None:
                 self._assign(departure_runway=end.ident)
         if route is None:
             return "no route along those taxiways"
-        missing = [n for n in names if n not in {name.upper() for name in route.taxiways}]
+        heard = {name.upper() for name in route.taxiways}
+        missing = [n for n in (*names, *((hold,) if hold and leg == "departure" else ())) if n not in heard]
         self._assign(taxi_route=names or route.taxiways)
         self._taxi_path = (geo.icao, [graph.positions[n] for n in route.nodes if n in graph.positions])
-        return f"drawn, but not along {', '.join(missing)}" if missing else ""
+        return f"drawn, but not along {', '.join(dict.fromkeys(missing))}" if missing else ""
+
+    @staticmethod
+    def _held_at(geo: AirportGeometry, graph: Any, route: Any, hold: str) -> Any:
+        """``route`` cut at its holding point: the first hold-short line of runway ``hold`` along it ("hold short of
+        16L"), else the first point where it joins taxiway ``hold``. None: neither is on it."""
+        runway = next((r for r in geo.runways if hold in r.runway.idents or hold == r.name), None)
+        for k, node in enumerate(route.nodes):
+            at = graph._hold_short_runway.get(node)
+            if runway is not None and at is runway:
+                return replace(route, nodes=route.nodes[: k + 1])
+            if runway is None and k and any(e.name.upper() == hold and e.to in route.nodes for e in graph.edges.get(node, ())):
+                return replace(route, nodes=route.nodes[: k + 1])
+        return None
 
     def handle(self, event: BusEvent) -> list[BusEvent]:
         # Everything said in this step is worded for where the controller the pilot is talking to sits.
@@ -1817,6 +1857,7 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
             self._assign(cruise_ft=cruise)
         if not own.on_ground and abs(own.vs_fpm) < 300:
             self._assign(altitude_ft=int(round(own.alt_indicated_ft, -2)))
+            self.taken_alt = st.assignments.altitude_ft  # (after _assign, which clears it)
         if own.squawk and own.squawk not in RESERVED_SQUAWKS and own.squawk not in ("7000", "7500", "7600", "7700"):
             self._assign(squawk=own.squawk)
 
@@ -1899,6 +1940,8 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
             gate = stands.parked_at(geo, own.lat, own.lon, self._real_gates(geo.icao)) if geo is not None else None
             self._assign(departure_gate=gate.display if gate is not None else None)
         # Only where there's a controller to clear it: an untowered field's pilots announce themselves on the CTAF.
+        if phase is P.TAXI_IN and self._given_arrival is not None:
+            self.set_given_taxi(*self._given_arrival, leg="arrival")  # typed in the air: drawn now it's landed
         if self.online_muted:
             pass  # With the online network's controller (IVAO, VATSIM): their clearances, not LocalTC's to miss.
         elif phase is P.TAXI_OUT and change.previous in (P.PARKED, P.PUSHBACK) and "taxi" not in st.clearances \
@@ -7133,7 +7176,7 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
                 info = self.current_atis(self.state.flight.destination)
                 self._arrival_landing = tuple(info.operations.landing) if info is not None and info.operations else ()
             if key == "altitude_ft":
-                self.discretion_alt = None  # a level given now is to be flown now (a discretion descent sets it after)
+                self.discretion_alt = self.taken_alt = None  # a level given now is to be flown now (a discretion descent sets it after)
             if key == "altitude_ft" and value is not None:
                 # Given again, it's to be reached again: 11,000 reached on the climb, then given as the descent
                 # (at pilot's discretion), had "check altitude" said at the top of the descent.

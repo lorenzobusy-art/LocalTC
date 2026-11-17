@@ -1576,5 +1576,14 @@
 "Taxi given by the online controller": "Rodaje dado por el controlador en línea",
 "Taxi route cleared": "Ruta de rodaje borrada",
 "Taxi route on the map": "Ruta de rodaje en el mapa",
-"Taxiways: M C H GE": "Calles de rodaje: M C H GE"
+"Taxiways: M C H GE": "Calles de rodaje: M C H GE",
+"Arrival holding point": "Punto de espera de llegada",
+"Arrival runway": "Pista de llegada",
+"Arrival taxiways": "Calles de rodaje de llegada",
+"Departure holding point": "Punto de espera de salida",
+"Departure runway": "Pista de salida",
+"Departure taxiways": "Calles de rodaje de salida",
+"Holding point": "Punto de espera",
+"Taxiways: AE B BT": "Calles de rodaje: AE B BT",
+"Where to hold short on the way in: a runway (16L) or a taxiway": "Dónde esperar en el rodaje de llegada: una pista (16L) o una calle de rodaje"
 }

@@ -379,9 +379,58 @@ def test_the_taxi_an_online_controller_gave_is_routed_along_its_taxiways_and_dra
     drawn = engine.taxi_path()
     assert drawn["to"] == "runway 34L" and len(drawn["points"]) > 1 and drawn["taxiways"] == ["A"]
     assert engine.state.assignments.departure_runway == "34L"
+    assert engine.set_given_taxi("34L", "A", "A1") == ""  # the holding point's taxiway
+    assert engine.set_given_taxi("34L", "A", "C") == "runway 34L has no holding point on C"
     assert engine.set_given_taxi("16R", "B, A") == "drawn, but not along B"  # KPAE has no B
     assert engine.set_given_taxi("99", "A") == "KPAE has no runway 99"
     assert engine.set_given_taxi("", "") == "" and engine.taxi_path() is None
+    assert engine.set_given_taxi("16R", "A", "", "arrival") == "kept: drawn once you've landed"
     up = msgspec.structs.replace(own, on_ground=False)
     engine.state.aircraft = up
     assert engine.set_given_taxi("34L", "A") == "only on the ground"
+
+
+def test_the_arrivals_taxi_typed_in_the_air_is_drawn_on_landing_and_held_at_its_holding_point():
+    from localtc.sim_api import PhaseChanged
+
+    engine, own = parked_engine(destination="KPAE")
+    geo = engine.geometry("KPAE")
+    graph = engine._taxi_graph(geo)
+    on_a = [n for n, edges in graph.edges.items() if n[0] == "point" and any(e.name == "A" for e in edges)]
+    lat, lon = geo.frame.to_latlon(*graph.positions[on_a[len(on_a) // 2]])
+    rolling = msgspec.structs.replace(own, lat=lat, lon=lon, parking_brake=False)
+    engine.state.aircraft = msgspec.structs.replace(rolling, on_ground=False)
+    engine.state.phase = "APPROACH"
+    assert engine.set_given_taxi("16R", "A", "", "arrival") == "kept: drawn once you've landed"
+    assert engine.state.assignments.arrival_runway == "16R" and engine.taxi_path() is None
+    engine.state.aircraft = rolling
+    engine.state.phase = "TAXI_IN"
+    engine._on_phase_change(PhaseChanged(t=9, previous="LANDING", phase="TAXI_IN"), rolling)
+    drawn = engine.taxi_path()
+    assert drawn is not None and drawn["to"] == "parking" and len(drawn["points"]) > 1
+    assert engine.set_given_taxi("", "A", "A2", "arrival") == "no holding point at A2 on that route"
+    assert engine.set_given_taxi("34L", "A", "", "departure") == "the flight has landed: that's the arrival's"
+
+
+def test_this_flights_speech_and_offers():
+    """Malpensa to Fiumicino: "descend for 1,000" is 4,000; "information B, QNH 1009" said back needs no answer;
+    "let's do it" takes the copilot's offer; a level taken when LocalTC takes the flight back is no clearance."""
+    from localtc.atc_core.readback.interpreter import GrammarInterpreter, InterpretContext
+    from localtc.atc_core.session import Callsign
+    from localtc.crew.commands import Command, parse
+
+    assert _read("Descend for 1,000 feet, cleared XIBI3A arrival, Itarrow 1128.", "center.descend_star",
+                 {"altitude": 4000}).status == "correct"
+    ctx = InterpretContext(callsign=Callsign.named("ITY1128"))
+    for said in ("Information B, QNH 1009, Itarrow 1128.", "Information B, Cunich 1009, radar 1128."):
+        assert GrammarInterpreter().interpret(said, None, ctx).intent == "acknowledge", said
+    assert GrammarInterpreter().interpret("request QNH", None, ctx).intent == "question"
+    for said in ("Let's do it.", "Take off. Check. Let's do it.", "Go ahead"):
+        assert parse(said) == [Command("yes")], said
+    engine, own = parked_engine()
+    level = msgspec.structs.replace(own, on_ground=False, alt_indicated_ft=19000, vs_fpm=0)
+    engine.state.aircraft = level
+    engine._assign(altitude_ft=19000)
+    engine.taken_alt = 19000
+    engine._assign(altitude_ft=24000)
+    assert engine.taken_alt is None  # LocalTC's own level: held to it again

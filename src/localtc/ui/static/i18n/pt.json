@@ -1576,5 +1576,14 @@
 "Taxi given by the online controller": "Rolagem dada pelo controlador online",
 "Taxi route cleared": "Rota de rolagem apagada",
 "Taxi route on the map": "Rota de rolagem no mapa",
-"Taxiways: M C H GE": "Taxiways: M C H GE"
+"Taxiways: M C H GE": "Taxiways: M C H GE",
+"Arrival holding point": "Ponto de espera na chegada",
+"Arrival runway": "Pista de chegada",
+"Arrival taxiways": "Taxiways na chegada",
+"Departure holding point": "Ponto de espera na partida",
+"Departure runway": "Pista de partida",
+"Departure taxiways": "Taxiways na partida",
+"Holding point": "Ponto de espera",
+"Taxiways: AE B BT": "Taxiways: AE B BT",
+"Where to hold short on the way in: a runway (16L) or a taxiway": "Onde aguardar na rolagem de chegada: uma pista (16L) ou uma taxiway"
 }

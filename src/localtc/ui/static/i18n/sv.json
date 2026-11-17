@@ -1576,5 +1576,14 @@
 "Taxi given by the online controller": "Taxning från onlineflygledaren",
 "Taxi route cleared": "Taxningsväg rensad",
 "Taxi route on the map": "Taxningsväg på kartan",
-"Taxiways: M C H GE": "Taxibanor: M C H GE"
+"Taxiways: M C H GE": "Taxibanor: M C H GE",
+"Arrival holding point": "Väntpunkt vid ankomst",
+"Arrival runway": "Landningsbana",
+"Arrival taxiways": "Taxibanor vid ankomst",
+"Departure holding point": "Väntpunkt vid avgång",
+"Departure runway": "Startbana",
+"Departure taxiways": "Taxibanor vid avgång",
+"Holding point": "Väntpunkt",
+"Taxiways: AE B BT": "Taxibanor: AE B BT",
+"Where to hold short on the way in: a runway (16L) or a taxiway": "Var du ska stanna före på väg in: en bana (16L) eller en taxibana"
 }

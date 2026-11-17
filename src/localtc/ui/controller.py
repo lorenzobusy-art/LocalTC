@@ -1051,7 +1051,9 @@ class AppController:
     async def api_given_taxi(self, args: dict) -> dict:
         """The Live Map's taxi from the online controller: {runway, taxiways}; both empty takes it off. ``note``: what
         couldn't be drawn ("" when it's on the map)."""
-        note = self._need_live().set_given_taxi(str(args.get("runway") or ""), str(args.get("taxiways") or ""))
+        leg = args.get("leg") if args.get("leg") in ("departure", "arrival") else ""
+        note = self._need_live().set_given_taxi(str(args.get("runway") or ""), str(args.get("taxiways") or ""),
+                                                str(args.get("hold") or ""), leg)
         return {"note": note}
 
     async def api_select_radio(self, args: dict) -> dict:

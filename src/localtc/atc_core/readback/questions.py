@@ -50,8 +50,10 @@ def is_question(text: str) -> bool:
                 return True
     # A topic word alone ("weather") makes a question, unless the pilot is asking for something
     # ("request deviation for weather") or reading back ("runway", "squawk").
-    return bool(set(words) & QUESTION_TOPICS) and not set(words) & {"cleared", "maintain", "squawk", "runway",
-                                                                     "request", "requesting"}
+    # Nor with the value in it: "information Bravo, QNH 1009" is the pilot saying back what ATC gave, not asking.
+    said_back = any(t.kind == "number" for t in tokens) and not _has_any(tokens, *QUESTION_CUES)
+    return bool(set(words) & QUESTION_TOPICS) and not said_back and not set(words) & {
+        "cleared", "maintain", "squawk", "runway", "request", "requesting"}
 
 
 def asks(text: str) -> bool:

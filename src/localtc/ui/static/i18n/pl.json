@@ -1576,5 +1576,14 @@
 "Taxi given by the online controller": "Kołowanie od kontrolera online",
 "Taxi route cleared": "Trasa kołowania usunięta",
 "Taxi route on the map": "Trasa kołowania na mapie",
-"Taxiways: M C H GE": "Drogi kołowania: M C H GE"
+"Taxiways: M C H GE": "Drogi kołowania: M C H GE",
+"Arrival holding point": "Punkt oczekiwania przy przylocie",
+"Arrival runway": "Pas do lądowania",
+"Arrival taxiways": "Drogi kołowania przy przylocie",
+"Departure holding point": "Punkt oczekiwania przy odlocie",
+"Departure runway": "Pas startowy",
+"Departure taxiways": "Drogi kołowania przy odlocie",
+"Holding point": "Punkt oczekiwania",
+"Taxiways: AE B BT": "Drogi kołowania: AE B BT",
+"Where to hold short on the way in: a runway (16L) or a taxiway": "Gdzie się zatrzymać przy kołowaniu po przylocie: pas (16L) lub droga kołowania"
 }

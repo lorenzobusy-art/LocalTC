@@ -558,9 +558,12 @@ table.lb td { white-space: nowrap; }
 .maptaxi[hidden] { display: none; }
 .maptaxi .mt-title { color: var(--muted); margin-bottom: 4px; }
 .maptaxi .mt-row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.maptaxi .mt-row + .mt-row { margin-top: 4px; }
+.maptaxi .mt-leg { width: 64px; color: var(--muted); }
+.maptaxi .mt-hold { width: 118px; }
 .maptaxi input { font-family: var(--mono); font-size: 12px; padding: 3px 6px; text-transform: uppercase; }
 .maptaxi .mt-rwy { width: 64px; }
-.maptaxi .mt-via { width: 180px; }
+.maptaxi .mt-via { width: 150px; }
 .maptaxi .mt-note { margin-top: 4px; color: #f0b849; }
 .maptaxi .mt-note:empty { display: none; }
 #page-map:has(#map-taxi:not([hidden])) .mapfreqs { max-height: calc(100% - 250px); }

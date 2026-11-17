@@ -151,11 +151,21 @@
       <!-- In the VATSIM / IVAO hybrid mode: the runway and taxiways the network's ground controller gave, drawn on the map -->
       <div class="maptaxi" id="map-taxi" hidden>
         <div class="mt-title">Taxi given by the online controller</div>
-        <div class="mt-row">
-          <input id="mt-rwy" class="mt-rwy" placeholder="Runway" aria-label="Runway" autocomplete="off" spellcheck="false">
-          <input id="mt-via" class="mt-via" placeholder="Taxiways: M C H GE" aria-label="Taxiways" autocomplete="off" spellcheck="false">
-          <button class="btn small" id="mt-show">Show</button>
-          <button class="btn small" id="mt-clear">Clear</button>
+        <div class="mt-row" data-leg="departure">
+          <span class="mt-leg">Departure</span>
+          <input class="mt-rwy" placeholder="Runway" aria-label="Departure runway" autocomplete="off" spellcheck="false">
+          <input class="mt-hold" placeholder="Holding point" aria-label="Departure holding point" autocomplete="off" spellcheck="false">
+          <input class="mt-via" placeholder="Taxiways: M C H GE" aria-label="Departure taxiways" autocomplete="off" spellcheck="false">
+          <button class="btn small mt-show">Show</button>
+          <button class="btn small mt-clear">Clear</button>
+        </div>
+        <div class="mt-row" data-leg="arrival">
+          <span class="mt-leg">Arrival</span>
+          <input class="mt-rwy" placeholder="Runway" aria-label="Arrival runway" autocomplete="off" spellcheck="false">
+          <input class="mt-hold" placeholder="Holding point" aria-label="Arrival holding point" title="Where to hold short on the way in: a runway (16L) or a taxiway" autocomplete="off" spellcheck="false">
+          <input class="mt-via" placeholder="Taxiways: AE B BT" aria-label="Arrival taxiways" autocomplete="off" spellcheck="false">
+          <button class="btn small mt-show">Show</button>
+          <button class="btn small mt-clear">Clear</button>
         </div>
         <div class="mt-note" id="mt-note"></div>
       </div>

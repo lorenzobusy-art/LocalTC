@@ -1576,5 +1576,14 @@
 "Taxi given by the online controller": "Rollfreigabe vom Online-Lotsen",
 "Taxi route cleared": "Rollweg gelöscht",
 "Taxi route on the map": "Rollweg auf der Karte",
-"Taxiways: M C H GE": "Rollwege: M C H GE"
+"Taxiways: M C H GE": "Rollwege: M C H GE",
+"Arrival holding point": "Haltepunkt bei der Ankunft",
+"Arrival runway": "Landebahn",
+"Arrival taxiways": "Rollwege bei der Ankunft",
+"Departure holding point": "Haltepunkt beim Abflug",
+"Departure runway": "Startbahn",
+"Departure taxiways": "Rollwege beim Abflug",
+"Holding point": "Haltepunkt",
+"Taxiways: AE B BT": "Rollwege: AE B BT",
+"Where to hold short on the way in: a runway (16L) or a taxiway": "Wo auf dem Weg zum Stand zu halten ist: eine Piste (16L) oder ein Rollweg"
 }

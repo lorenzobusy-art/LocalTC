@@ -1576,5 +1576,14 @@
 "Taxi given by the online controller": "在线管制员给出的滑行路线",
 "Taxi route cleared": "滑行路线已清除",
 "Taxi route on the map": "滑行路线已显示在地图上",
-"Taxiways: M C H GE": "滑行道：M C H GE"
+"Taxiways: M C H GE": "滑行道：M C H GE",
+"Arrival holding point": "到达等待点",
+"Arrival runway": "到达跑道",
+"Arrival taxiways": "到达滑行道",
+"Departure holding point": "离场等待点",
+"Departure runway": "离场跑道",
+"Departure taxiways": "离场滑行道",
+"Holding point": "等待点",
+"Taxiways: AE B BT": "滑行道：AE B BT",
+"Where to hold short on the way in: a runway (16L) or a taxiway": "到达滑行时在何处等待：跑道（16L）或滑行道"
 }

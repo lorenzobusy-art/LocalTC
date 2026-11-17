@@ -1576,5 +1576,14 @@
 "Taxi given by the online controller": "Taxi van de online verkeersleider",
 "Taxi route cleared": "Taxiroute gewist",
 "Taxi route on the map": "Taxiroute op de kaart",
-"Taxiways: M C H GE": "Taxibanen: M C H GE"
+"Taxiways: M C H GE": "Taxibanen: M C H GE",
+"Arrival holding point": "Wachtpunt bij aankomst",
+"Arrival runway": "Landingsbaan",
+"Arrival taxiways": "Taxibanen bij aankomst",
+"Departure holding point": "Wachtpunt bij vertrek",
+"Departure runway": "Startbaan",
+"Departure taxiways": "Taxibanen bij vertrek",
+"Holding point": "Wachtpunt",
+"Taxiways: AE B BT": "Taxibanen: AE B BT",
+"Where to hold short on the way in: a runway (16L) or a taxiway": "Waar te wachten op weg naar binnen: een baan (16L) of een taxibaan"
 }

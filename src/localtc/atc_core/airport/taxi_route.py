@@ -170,8 +170,8 @@ class TaxiGraph:
             nodes=tuple(node for node, _ in path),
         )
 
-    def departure_route(self, lat: float, lon: float, end: RunwayEndGeometry, *, via: tuple[str, ...] = ()
-                        ) -> TaxiRoute | None:
+    def departure_route(self, lat: float, lon: float, end: RunwayEndGeometry, *, via: tuple[str, ...] = (),
+                        hold: str = "") -> TaxiRoute | None:
         """Route to the full-length hold-short point for a runway end; ``via``: along the taxiways named (an online
         controller's), to the holding point on the last of them where it has one."""
         candidates = [h for h in self.geometry.hold_shorts if h.runway is end.runway]
@@ -181,7 +181,7 @@ class TaxiGraph:
         if start is None:
             return None
         # A correction says which taxiway the holding point is on (Montreal's 06L: C): that one, if it's there.
-        wanted = via[-1].upper() if via else self.geometry.hold_taxiways.get(end.ident)
+        wanted = hold.upper() or (via[-1].upper() if via else self.geometry.hold_taxiways.get(end.ident))
         on = [h for h in candidates if any(e.name.upper() == wanted.upper() for e in self.edges.get(("point", h.point.index), ()))] if wanted else []
         if on:
             candidates = on

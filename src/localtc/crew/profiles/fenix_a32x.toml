@@ -38,6 +38,9 @@ unread = ["ap_speed_sel", "ap_altitude_sel", "xpdr_mode"]   # (the sim's transpo
 flaps_index = "L:S_FC_FLAPS"
 flaps_positions = "4"
 seatbelt = "L:S_OH_SIGNS >= 1"
+# The speedbrake lever: 0 armed, 1 retracted, more as it's pulled out (read in the sim, 2026-11-17). The sim's
+# SPOILERS ARMED never follows it: the checklists said "Spoilers? Shows not armed" with the lever on ARM.
+spoilers_armed = "L:A_FC_SPEEDBRAKE < 0.5"
 light_landing = "L:S_OH_EXT_LT_LANDING_L >= 2"   # 0 retract, 1 off, 2 on
 
 [actions.seatbelt]

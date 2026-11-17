@@ -453,6 +453,9 @@ def match_intents(tokens: list[Token]) -> list[IntentMatch]:
                                 ("give", "way"), ("giving", "way"), ("have", "the", "traffic"), ("behind", "the"),
                                 ("continue", "approach"), ("continuing", "approach"), ("continuing",)):
         add("acknowledge")  # "hold position, B737 crossing" / "give way to the A320": the pilot waits, nothing to answer
+    if not matches and _has_any(tokens, ("information",), ("qnh",), ("altimeter",), ("cunich",)) \
+            and any(t.kind == "number" for t in tokens) and not _has_any(tokens, *REQUEST_WORDS):
+        add("acknowledge")  # "information Bravo, QNH 1009": the ATIS and the QNH ATC gave, said back; nothing to answer
     if not matches and _has_any(tokens, ("expect", "runway"), ("expecting", "runway"), ("expect", "a", "runway")) \
             and runways(tokens) and not _has_any(tokens, *REQUEST_WORDS) and not _has_any(tokens, ("can", "we"), ("could", "we")):
         add("acknowledge")  # "expect runway 35L, Itarrow 1128": ATC's "expect runway 35L" said back, nothing to answer
