@@ -117,6 +117,10 @@ a new minor version adds features, a patch fixes them.
   instead of ATC's "say again".
 
 ### Fixed
+- **An online approach with a sector in its callsign** (IVAO's LIMC_ANE_APP) works that sector's outline round its
+  airport (Milan's ANE, round Malpensa), not the one under the point the network gives for the controller (near
+  Piacenza). With COM1 on Milan's 126.75 short of Turin, LocalTC's own Milan Approach answered over the IVAO
+  controller. A flight tuned to a network controller now counts as with them up to 40 nm outside their outline (was 30).
 - **Readbacks as speech-to-text writes them:**
   - frequencies with "two" written "to" ("135 decimal 6 to 5") or a comma before "decimal" ("1, 2, 1, decimal 8, 2,
     5") are heard whole. They were heard as 135.6, and the handoff got "negative";

@@ -45,7 +45,7 @@ TOWER_ZONE_NM = 10.0  # a tower's zone round its field ...
 TOWER_ZONE_AGL_FT = 3000.0  # ... below this above it
 APPROACH_MAX_FT = 24500.0  # an approach (or departure) controller below FL245
 TUNED_SLACK = 1.5  # COM1 on a controller's frequency counts as with them out to this times their range
-TUNED_AREA_NM = 30.0  # ... or this close outside their outline (just across the line, the handoff not made yet)
+TUNED_AREA_NM = 40.0  # ... or this close outside their outline (the controller took the flight early, Milan at Turin)
 SAME_MHZ = 0.004  # 121.800 and 121.805 are one frequency (8.33 kHz spacing)
 RELEVANT_NM = 400.0  # the controllers kept around the aircraft and its route's points (beyond their own range)
 
@@ -97,8 +97,20 @@ def _area(callsign: str, kind: str, lat: float, lon: float) -> Area | None:
         named = by_id.get(prefix) or (by_id.get(f"K{prefix}") if len(prefix) == 3 else None)
         return named or sky.center_at(lat, lon)
     code = f"K{prefix}" if len(prefix) == 3 else prefix  # SEA_APP: KSEA (an approach area serves "SEA")
-    area = sky.approach_for(code, lat, lon)
-    return area if area is not None and (area.serves(code) or area.contains(lat, lon)) else None
+    field = airport_field(code)
+    parts = callsign.upper().split("_")
+    if len(parts) >= 3:
+        # A sector in the callsign (IVAO's LIMC_ANE_APP): the outline of that sector ("LIMM_ANE") round its airport.
+        # Where the controller says they are (near Piacenza) lies in another of Milan's sectors.
+        sector = parts[1]
+        named = [a for a in sky.approaches if any(s.upper().endswith(f"_{sector}") for s in a.airports)
+                 and (a.contains(*field) if field is not None else a.contains(lat, lon))]
+        if named:
+            return min(named, key=lambda a: a.size)
+    # The approach area of the airport, else the one round it: not round the point the controller gives.
+    at = field or (lat, lon)
+    area = sky.approach_for(code, *at)
+    return area if area is not None and (area.serves(code) or area.contains(*at)) else None
 
 
 def _inside(area: Area, own: OwnshipState) -> bool:

@@ -336,3 +336,17 @@ def test_a_checklist_asked_for_unheard_is_the_one_just_offered():
     pm.monitor.f.checklists.update({"cockpit_prep", "before_start"})
     pm.monitor.offer = Offer("checklist", "after_start", 60.0)
     assert said(pm.observe(IntercomHeard(t=2, text="Officer's on checklist.")))[0].startswith("After start checklist.")
+
+
+def test_an_ivao_approach_with_a_sector_in_its_callsign_works_that_sectors_outline_round_its_airport():
+    """LIMC_ANE_APP, placed by IVAO near Piacenza: Milan's ANE sector (round Malpensa), not the one under that point;
+    tuned to it from the west, short of the line, the flight is with them."""
+    from localtc.atc_core import online as online_atc
+    from localtc.sim_api import OnlineController
+
+    milan = OnlineController(callsign="LIMC_ANE_APP", frequency_mhz=126.75, kind="APP", lat=44.91672, lon=9.7126,
+                             range_nm=40.0, name="")
+    area = online_atc.area_of(milan)
+    assert area is not None and "LIMM_ANE" in area.airports and area.contains(45.63, 8.72)
+    near_turin = online_atc.point(45.51, 7.46, ground=False, alt_ft=23700, agl_ft=23000)
+    assert online_atc._reaches(milan, near_turin)
