@@ -859,6 +859,10 @@ class LiveSession:
         if self.engine is not None:
             self.engine.set_spoken_callsigns(spoken)
 
+    def set_given_taxi(self, runway: str, taxiways: str) -> str:
+        """The runway and taxiways the online network's ground controller gave, typed on the Live Map: drawn there."""
+        return self.engine.set_given_taxi(runway, taxiways) if self.engine is not None else "the ATC isn't running"
+
     def set_online_network(self, network: str) -> None:
         """Only LocalTC (""), VATSIM or IVAO hybrid, changed in flight: from now on, nothing restarted."""
         if self.atc is None:

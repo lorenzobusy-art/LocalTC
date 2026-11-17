@@ -542,6 +542,7 @@ const Online = {
   },
   render() {
     const o = S.state?.online, box = $("#online-box");
+    TaxiBox.render();  // the Live Map's box for the network ground controller's taxi, in the hybrid mode only
     if (!box) return;
     box.hidden = !(o && o.integration);
     if (box.hidden) return;
@@ -598,6 +599,26 @@ const FreqTable = {
   },
 };
 try { if (localStorage.getItem("map-freqs") === "folded") $("#map-freqs").classList.add("folded"); } catch { /* open */ }
+
+// The Live Map's box for the taxi the network's ground controller gave (VATSIM / IVAO hybrid only): the runway and the
+// taxiways typed, LocalTC routes along them from where the aircraft is and draws the route as it does its own.
+const TaxiBox = {
+  render() {
+    const box = $("#map-taxi");
+    if (box) box.hidden = !S.state?.online?.network;
+  },
+  async send(runway, taxiways) {
+    const note = $("#mt-note");
+    try {
+      const r = await api("given_taxi", { runway, taxiways });
+      note.textContent = r.note || "";
+      if (!r.note) toast(runway || taxiways ? "Taxi route on the map" : "Taxi route cleared");
+    } catch (e) { note.textContent = e.message; }
+  },
+};
+$("#mt-show").onclick = () => TaxiBox.send($("#mt-rwy").value.trim(), $("#mt-via").value.trim());
+$("#mt-clear").onclick = () => { $("#mt-rwy").value = ""; $("#mt-via").value = ""; TaxiBox.send("", ""); };
+["#mt-rwy", "#mt-via"].forEach((sel) => $(sel).addEventListener("keydown", (e) => { if (e.key === "Enter") $("#mt-show").click(); }));
 
 /* ---------- tabs and dialogs ---------- */
 

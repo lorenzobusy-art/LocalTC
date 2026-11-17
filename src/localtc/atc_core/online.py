@@ -107,10 +107,13 @@ def _area(callsign: str, kind: str, lat: float, lon: float) -> Area | None:
                  and (a.contains(*field) if field is not None else a.contains(lat, lon))]
         if named:
             return min(named, key=lambda a: a.size)
-    # The approach area of the airport, else the one round it: not round the point the controller gives.
+    # The approach area named for the airport; else, round the airport (not round the point the controller gives), the
+    # largest of its sectors: a controller with no sector of their own (LIMC_APP) works them all, so none is lost.
     at = field or (lat, lon)
-    area = sky.approach_for(code, *at)
-    return area if area is not None and (area.serves(code) or area.contains(*at)) else None
+    if any(a.serves(code) for a in sky.approaches):
+        return sky.approach_for(code, *at)
+    around = [a for a in sky.approaches if a.contains(*at) and a.kind != "departure"]
+    return max(around, key=lambda a: a.size, default=None)
 
 
 def _inside(area: Area, own: OwnshipState) -> bool:

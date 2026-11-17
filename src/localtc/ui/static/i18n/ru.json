@@ -1571,5 +1571,10 @@
 "ATC will say \"{0}\"": "ATC скажет «{0}»",
 "ATC will say the callsign its own way": "ATC произнесёт позывной по-своему",
 "Callsign said as": "Позывной произносится как",
-"Write it as ATC should say it, e.g. \"ita arrow 1128\": a number in it is said digit by digit, and ATC hears you say it so. Blank: LocalTC's.": "Напишите так, как его должен говорить ATC, напр. «ita arrow 1128»: числа произносятся по цифрам, и ATC узнает вас, когда вы скажете так. Пусто: как в LocalTC."
+"Write it as ATC should say it, e.g. \"ita arrow 1128\": a number in it is said digit by digit, and ATC hears you say it so. Blank: LocalTC's.": "Напишите так, как его должен говорить ATC, напр. «ita arrow 1128»: числа произносятся по цифрам, и ATC узнает вас, когда вы скажете так. Пусто: как в LocalTC.",
+"Clear": "Очистить",
+"Taxi given by the online controller": "Руление от онлайн-диспетчера",
+"Taxi route cleared": "Маршрут руления удалён",
+"Taxi route on the map": "Маршрут руления на карте",
+"Taxiways: M C H GE": "Рулёжки: M C H GE"
 }

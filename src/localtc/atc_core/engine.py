@@ -766,6 +766,44 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
         if self.state.flight.callsign is not None:
             self.state.flight.callsign = self._own(getattr(self, "_own_given", None) or self.state.flight.callsign)
 
+    def set_given_taxi(self, runway: str, taxiways: str) -> str:
+        """A taxi route the pilot was given on the online network (IVAO, VATSIM), typed on the Live Map: "35R" and
+        "M C H GE". LocalTC routes along those taxiways from where the aircraft is (to the runway's holding point on the
+        way out, to the gate given or the nearest parking on the way in) and draws it on the map. Both empty: the
+        route is taken off. Returns what went wrong, or "" when it's drawn."""
+        names = tuple(n for n in re.split(r"[\s,;/.-]+", taxiways.upper()) if n and n != "VIA")
+        runway = runway.strip().upper().removeprefix("RWY").removeprefix("RUNWAY").strip()
+        if not names and not runway:
+            self._taxi_path = None
+            return ""
+        own, st = self.state.aircraft, self.state
+        if own is None or not own.on_ground:
+            return "only on the ground"
+        icao = st.flight.destination if self._arriving else st.flight.origin
+        geo = self.geometry(icao)
+        if geo is None:
+            return f"no layout of {icao or 'this airport'} yet"
+        graph = self._taxi_graph(geo)
+        if self._arriving:
+            spot = st.assignments.gate_index
+            route = graph.parking_route(own.lat, own.lon, spot, heading=own.hdg_true, via=names)
+        else:
+            end = geo.end(runway) if runway else None
+            if runway and end is None:
+                return f"{icao} has no runway {runway}"
+            end = end or (geo.end(st.assignments.departure_runway) if st.assignments.departure_runway else None)
+            if end is None:
+                return "the runway is needed"
+            route = graph.departure_route(own.lat, own.lon, end, via=names)
+            if route is not None:
+                self._assign(departure_runway=end.ident)
+        if route is None:
+            return "no route along those taxiways"
+        missing = [n for n in names if n not in {name.upper() for name in route.taxiways}]
+        self._assign(taxi_route=names or route.taxiways)
+        self._taxi_path = (geo.icao, [graph.positions[n] for n in route.nodes if n in graph.positions])
+        return f"drawn, but not along {', '.join(missing)}" if missing else ""
+
     def handle(self, event: BusEvent) -> list[BusEvent]:
         # Everything said in this step is worded for where the controller the pilot is talking to sits.
         self.region = self._region()

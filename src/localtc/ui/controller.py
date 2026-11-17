@@ -182,6 +182,7 @@ class AppController:
             (post, "radio/ptt"): self.api_ptt,
             (post, "radio/tune"): self.api_tune,
             (post, "radio/select"): self.api_select_radio,
+            (post, "given_taxi"): self.api_given_taxi,  # the Live Map: the taxi the online controller gave
             (post, "radio/copilot"): self.api_copilot,
             (post, "radio/mute"): self.api_mute,
             (post, "account/prompt"): self.api_account_prompt,
@@ -1046,6 +1047,12 @@ class AppController:
             raise HttpError(400, f"{mhz} isn't a COM frequency")
         await self._need_live().tune(mhz, int(args.get("radio", 1)))
         return {}
+
+    async def api_given_taxi(self, args: dict) -> dict:
+        """The Live Map's taxi from the online controller: {runway, taxiways}; both empty takes it off. ``note``: what
+        couldn't be drawn ("" when it's on the map)."""
+        note = self._need_live().set_given_taxi(str(args.get("runway") or ""), str(args.get("taxiways") or ""))
+        return {"note": note}
 
     async def api_select_radio(self, args: dict) -> dict:
         await self._need_live().select_radio(2 if args.get("radio") in (2, "2") else 1)

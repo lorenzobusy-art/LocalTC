@@ -552,6 +552,18 @@ table.lb td { white-space: nowrap; }
 
 /* --- Live Map: the minimum altitude --- */
 .mapmva { bottom: 44px; color: #4fd1c5; }
+.maptaxi { position: absolute; left: 10px; bottom: 78px; z-index: 500; background: rgba(20, 23, 27, .9);
+  border: 1px solid rgba(255, 255, 255, .12); border-radius: 3px; padding: 6px 8px; font-size: 12px;
+  max-width: calc(100% - 20px); }
+.maptaxi[hidden] { display: none; }
+.maptaxi .mt-title { color: var(--muted); margin-bottom: 4px; }
+.maptaxi .mt-row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.maptaxi input { font-family: var(--mono); font-size: 12px; padding: 3px 6px; text-transform: uppercase; }
+.maptaxi .mt-rwy { width: 64px; }
+.maptaxi .mt-via { width: 180px; }
+.maptaxi .mt-note { margin-top: 4px; color: #f0b849; }
+.maptaxi .mt-note:empty { display: none; }
+#page-map:has(#map-taxi:not([hidden])) .mapfreqs { max-height: calc(100% - 250px); }
 .mapmva:empty { display: none; }
 
 /* --- EFB (efb.js) --- */

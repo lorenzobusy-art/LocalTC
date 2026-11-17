@@ -7,6 +7,10 @@ a new minor version adds features, a patch fixes them.
 ## [0.5.6] - Upcoming
 
 ### Added
+- **The online controller's taxi on the Live Map:** in the VATSIM / IVAO hybrid mode, a box at the bottom left of the
+  map takes the runway and the taxiways the network's ground controller gave ("35R", "M C H GE"). LocalTC routes along
+  those taxiways from where the aircraft is (to the runway's holding point on the way out, to the gate or the nearest
+  parking on the way in) and draws the route as it draws its own, saying if a taxiway isn't on it. Clear takes it off.
 - **The Fenix A319/A320/A321's checklists read its cockpit:** the copilot reads the Airbus normal checklist (the
   QRH's) against the Fenix's own switches: the ADIRS, parking brake, beacon, signs, radar and predictive windshear,
   autobrake, flaps, TCAS, packs, engine masters and mode selector, APU bleed, fuel pumps, exterior lights, crew oxygen
@@ -121,6 +125,10 @@ a new minor version adds features, a patch fixes them.
   airport (Milan's ANE, round Malpensa), not the one under the point the network gives for the controller (near
   Piacenza). With COM1 on Milan's 126.75 short of Turin, LocalTC's own Milan Approach answered over the IVAO
   controller. A flight tuned to a network controller now counts as with them up to 40 nm outside their outline (was 30).
+  - The same for every controller: each sector in LocalTC's outlines, named with an airport inside it, finds its outline
+    round that airport whatever position the network gives (checked for all of them).
+  - An approach controller with no sector in the callsign (LIMC_APP) works the largest of the airport's sectors, not the
+    smallest.
 - **Readbacks as speech-to-text writes them:**
   - frequencies with "two" written "to" ("135 decimal 6 to 5") or a comma before "decimal" ("1, 2, 1, decimal 8, 2,
     5") are heard whole. They were heard as 135.6, and the handoff got "negative";

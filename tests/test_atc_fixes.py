@@ -350,3 +350,38 @@ def test_an_ivao_approach_with_a_sector_in_its_callsign_works_that_sectors_outli
     assert area is not None and "LIMM_ANE" in area.airports and area.contains(45.63, 8.72)
     near_turin = online_atc.point(45.51, 7.46, ground=False, alt_ft=23700, agl_ft=23000)
     assert online_atc._reaches(milan, near_turin)
+
+
+def test_no_controller_loses_its_sector_whatever_point_the_network_gives():
+    """Every sector of LocalTC's approach outlines, named in a callsign with an airport inside it and a position given a
+    degree off: an outline round that airport. A callsign with no sector gets the largest of the airport's sectors."""
+    from localtc.atc_core import online as online_atc
+    from localtc.sim_api import OnlineController
+
+    sky = online_atc.Airspace.load()
+    fields = [(a.icao, a.lat, a.lon) for a in online_atc.world() if len(a.icao) == 4 and a.icao.isalpha()]
+    checked = 0
+    for area in sky.approaches:
+        for sector in (s.split("_", 1)[1] for s in area.airports if "_" in s):
+            for icao, lat, lon in [f for f in fields if area.contains(f[1], f[2])][:2]:
+                got = online_atc._area(f"{icao}_{sector}_APP", "APP", round(lat + 1, 2), round(lon + 1, 2))
+                assert got is not None and got.contains(lat, lon), (icao, sector)
+                checked += 1
+    assert checked > 100
+    milan = OnlineController(callsign="LIMC_APP", frequency_mhz=126.75, kind="APP", lat=44.9, lon=9.7, range_nm=40.0,
+                             name="")
+    assert "LIMM_ANE" in online_atc.area_of(milan).airports  # Milan's largest, not the small ANW
+
+
+def test_the_taxi_an_online_controller_gave_is_routed_along_its_taxiways_and_drawn():
+    engine, own = parked_engine(destination="KBFI")
+    assert engine.set_given_taxi("34L", "via A") == ""
+    drawn = engine.taxi_path()
+    assert drawn["to"] == "runway 34L" and len(drawn["points"]) > 1 and drawn["taxiways"] == ["A"]
+    assert engine.state.assignments.departure_runway == "34L"
+    assert engine.set_given_taxi("16R", "B, A") == "drawn, but not along B"  # KPAE has no B
+    assert engine.set_given_taxi("99", "A") == "KPAE has no runway 99"
+    assert engine.set_given_taxi("", "") == "" and engine.taxi_path() is None
+    up = msgspec.structs.replace(own, on_ground=False)
+    engine.state.aircraft = up
+    assert engine.set_given_taxi("34L", "A") == "only on the ground"

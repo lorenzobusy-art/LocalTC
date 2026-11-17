@@ -1571,5 +1571,10 @@
 "ATC will say \"{0}\"": "ATC säger \"{0}\"",
 "ATC will say the callsign its own way": "ATC säger anropssignalen på sitt eget sätt",
 "Callsign said as": "Anropssignal sägs som",
-"Write it as ATC should say it, e.g. \"ita arrow 1128\": a number in it is said digit by digit, and ATC hears you say it so. Blank: LocalTC's.": "Skriv den som ATC ska säga den, t.ex. \"ita arrow 1128\": siffror sägs en i taget, och ATC känner igen dig när du säger den så. Tomt: LocalTC:s."
+"Write it as ATC should say it, e.g. \"ita arrow 1128\": a number in it is said digit by digit, and ATC hears you say it so. Blank: LocalTC's.": "Skriv den som ATC ska säga den, t.ex. \"ita arrow 1128\": siffror sägs en i taget, och ATC känner igen dig när du säger den så. Tomt: LocalTC:s.",
+"Clear": "Rensa",
+"Taxi given by the online controller": "Taxning från onlineflygledaren",
+"Taxi route cleared": "Taxningsväg rensad",
+"Taxi route on the map": "Taxningsväg på kartan",
+"Taxiways: M C H GE": "Taxibanor: M C H GE"
 }

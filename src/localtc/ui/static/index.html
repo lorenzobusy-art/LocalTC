@@ -148,6 +148,17 @@
       <div class="maplegend" id="map-legend"></div>
       <!-- The flight's frequencies: each airspace, its frequency and who works it (LocalTC, or VATSIM / IVAO top-down) -->
       <div class="mapfreqs" id="map-freqs" hidden></div>
+      <!-- In the VATSIM / IVAO hybrid mode: the runway and taxiways the network's ground controller gave, drawn on the map -->
+      <div class="maptaxi" id="map-taxi" hidden>
+        <div class="mt-title">Taxi given by the online controller</div>
+        <div class="mt-row">
+          <input id="mt-rwy" class="mt-rwy" placeholder="Runway" aria-label="Runway" autocomplete="off" spellcheck="false">
+          <input id="mt-via" class="mt-via" placeholder="Taxiways: M C H GE" aria-label="Taxiways" autocomplete="off" spellcheck="false">
+          <button class="btn small" id="mt-show">Show</button>
+          <button class="btn small" id="mt-clear">Clear</button>
+        </div>
+        <div class="mt-note" id="mt-note"></div>
+      </div>
     </section>
 
     <!-- EFB (efb.js): briefing, plan and fuel, airport and gates, charts, checklists, scratchpad, Ops, documents -->

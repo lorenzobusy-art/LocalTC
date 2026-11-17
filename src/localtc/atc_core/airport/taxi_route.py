@@ -41,6 +41,7 @@ class _Edge:
 
 TURN_AROUND_M = 1500.0  # what starting behind the aircraft costs: a long way round is better than a U-turn
 CLOSED_PENALTY = 100.0  # a closed taxiway (the ATIS's notice) is used only where there's no other way
+OFF_VIA_PENALTY = 25.0  # a route given by name (an online controller's "via M, C, H, GE"): other taxiways only to join it
 
 
 class TaxiGraph:
@@ -85,8 +86,8 @@ class TaxiGraph:
     def _on_runway(self, node: Node) -> bool:
         return any(r.contains(self.positions[node]) for r in self.geometry.runways)
 
-    def shortest_path(self, start: Node, goals: set[Node], *, heading: float | None = None
-                      ) -> list[tuple[Node, _Edge | None]] | None:
+    def shortest_path(self, start: Node, goals: set[Node], *, heading: float | None = None,
+                      via: frozenset[str] = frozenset()) -> list[tuple[Node, _Edge | None]] | None:
         """``heading``: the way the aircraft faces at ``start``; the first stretch taken back the other way costs a
         turn-around (Haneda's taxi in began on T9, behind the aircraft: a U-turn on a taxiway)."""
         dist: dict[Node, float] = {start: 0.0}
@@ -105,7 +106,7 @@ class TaxiGraph:
             if d > dist.get(node, math.inf):
                 continue
             for edge in self.edges.get(node, ()):
-                nd = d + edge.cost
+                nd = d + edge.cost * (OFF_VIA_PENALTY if via and edge.name.upper() not in via else 1.0)
                 if heading is not None and node == start:
                     (ax, ay), (bx, by) = self.positions[node], self.positions[edge.to]
                     bearing = math.degrees(math.atan2(bx - ax, by - ay)) % 360
@@ -130,8 +131,9 @@ class TaxiGraph:
         return points[1:-1]
 
     def route(self, start: Node, goals: set[Node], *, hold_short: str | None = None,
-              heading: float | None = None) -> TaxiRoute | None:
-        path = self.shortest_path(start, goals, heading=heading)
+              heading: float | None = None, via: tuple[str, ...] = ()) -> TaxiRoute | None:
+        """``via``: the taxiways a controller named, followed where they go (others only to reach them)."""
+        path = self.shortest_path(start, goals, heading=heading, via=frozenset(n.upper() for n in via))
         if path is None:
             return None
         edges = [edge for _, edge in path if edge is not None]
@@ -168,8 +170,10 @@ class TaxiGraph:
             nodes=tuple(node for node, _ in path),
         )
 
-    def departure_route(self, lat: float, lon: float, end: RunwayEndGeometry) -> TaxiRoute | None:
-        """Route to the full-length hold-short point for a runway end."""
+    def departure_route(self, lat: float, lon: float, end: RunwayEndGeometry, *, via: tuple[str, ...] = ()
+                        ) -> TaxiRoute | None:
+        """Route to the full-length hold-short point for a runway end; ``via``: along the taxiways named (an online
+        controller's), to the holding point on the last of them where it has one."""
         candidates = [h for h in self.geometry.hold_shorts if h.runway is end.runway]
         if not candidates:
             return None
@@ -177,8 +181,8 @@ class TaxiGraph:
         if start is None:
             return None
         # A correction says which taxiway the holding point is on (Montreal's 06L: C): that one, if it's there.
-        wanted = self.geometry.hold_taxiways.get(end.ident)
-        on = [h for h in candidates if any(e.name == wanted for e in self.edges.get(("point", h.point.index), ()))] if wanted else []
+        wanted = via[-1].upper() if via else self.geometry.hold_taxiways.get(end.ident)
+        on = [h for h in candidates if any(e.name.upper() == wanted.upper() for e in self.edges.get(("point", h.point.index), ()))] if wanted else []
         if on:
             candidates = on
         # A runway usually has a hold line on each side of its threshold. The one nearest the threshold
@@ -189,7 +193,7 @@ class TaxiGraph:
         nearest = min(math.dist(h.xy, end.threshold) for h in candidates)
         near = [h for h in candidates if math.dist(h.xy, end.threshold) <= nearest + FULL_LENGTH_SLACK_M]
         routes = [(r, math.dist(h.xy, end.threshold)) for h in near
-                  if (r := self.route(start, {("point", h.point.index)}, hold_short=end.ident))]
+                  if (r := self.route(start, {("point", h.point.index)}, hold_short=end.ident, via=via))]
         if not routes:
             return None
         best, _ = min(routes, key=lambda rd: (end.runway.name in rd[0].crossings, len(rd[0].crossings), rd[1], rd[0].length_m))
@@ -241,7 +245,7 @@ class TaxiGraph:
         return first[1], first[2]
 
     def parking_route(self, lat: float, lon: float, spot: int | None = None, *, kind: str = "",
-                      heading: float | None = None, span_m: float = 0.0) -> TaxiRoute | None:
+                      heading: float | None = None, span_m: float = 0.0, via: tuple[str, ...] = ()) -> TaxiRoute | None:
         """To the nearest parking, or to parking spot ``spot`` (a gate ATC assigned). ``kind``: only spots whose
         kind starts with it ("ramp_ga": a GA flight's), when the airport has any. ``heading``: the way the aircraft
         faces, a route ahead of it preferred to one behind."""
@@ -258,7 +262,7 @@ class TaxiGraph:
         start = self.nearest_node(lat, lon)
         if start is None or not goals:
             return None
-        return self.route(start, goals, heading=heading)
+        return self.route(start, goals, heading=heading, via=via)
 
 
 FAST_EXIT_DEG = 45.0  # an exit leaving the runway at less than this: a high-speed one

@@ -1571,5 +1571,10 @@
 "ATC will say \"{0}\"": "ATC sagt \"{0}\"",
 "ATC will say the callsign its own way": "ATC sagt das Rufzeichen auf seine Art",
 "Callsign said as": "Rufzeichen gesprochen als",
-"Write it as ATC should say it, e.g. \"ita arrow 1128\": a number in it is said digit by digit, and ATC hears you say it so. Blank: LocalTC's.": "So schreiben, wie ATC es sagen soll, z. B. \"ita arrow 1128\": Zahlen werden Ziffer für Ziffer gesprochen, und ATC versteht dich, wenn du es so sagst. Leer: das von LocalTC."
+"Write it as ATC should say it, e.g. \"ita arrow 1128\": a number in it is said digit by digit, and ATC hears you say it so. Blank: LocalTC's.": "So schreiben, wie ATC es sagen soll, z. B. \"ita arrow 1128\": Zahlen werden Ziffer für Ziffer gesprochen, und ATC versteht dich, wenn du es so sagst. Leer: das von LocalTC.",
+"Clear": "Löschen",
+"Taxi given by the online controller": "Rollfreigabe vom Online-Lotsen",
+"Taxi route cleared": "Rollweg gelöscht",
+"Taxi route on the map": "Rollweg auf der Karte",
+"Taxiways: M C H GE": "Rollwege: M C H GE"
 }

@@ -1571,5 +1571,10 @@
 "ATC will say \"{0}\"": "ATC zegt \"{0}\"",
 "ATC will say the callsign its own way": "ATC zegt de roepnaam op zijn eigen manier",
 "Callsign said as": "Roepnaam uitgesproken als",
-"Write it as ATC should say it, e.g. \"ita arrow 1128\": a number in it is said digit by digit, and ATC hears you say it so. Blank: LocalTC's.": "Schrijf het zoals ATC het moet zeggen, bijv. \"ita arrow 1128\": getallen worden cijfer voor cijfer gezegd, en ATC verstaat je als je het zo zegt. Leeg: die van LocalTC."
+"Write it as ATC should say it, e.g. \"ita arrow 1128\": a number in it is said digit by digit, and ATC hears you say it so. Blank: LocalTC's.": "Schrijf het zoals ATC het moet zeggen, bijv. \"ita arrow 1128\": getallen worden cijfer voor cijfer gezegd, en ATC verstaat je als je het zo zegt. Leeg: die van LocalTC.",
+"Clear": "Wissen",
+"Taxi given by the online controller": "Taxi van de online verkeersleider",
+"Taxi route cleared": "Taxiroute gewist",
+"Taxi route on the map": "Taxiroute op de kaart",
+"Taxiways: M C H GE": "Taxibanen: M C H GE"
 }

@@ -1571,5 +1571,10 @@
 "ATC will say \"{0}\"": "ATC 将说“{0}”",
 "ATC will say the callsign its own way": "ATC 将按自己的方式读呼号",
 "Callsign said as": "呼号读作",
-"Write it as ATC should say it, e.g. \"ita arrow 1128\": a number in it is said digit by digit, and ATC hears you say it so. Blank: LocalTC's.": "按 ATC 应读的方式填写，例如“ita arrow 1128”：数字逐位读出，你这样说时 ATC 也能听懂。留空：使用 LocalTC 的读法。"
+"Write it as ATC should say it, e.g. \"ita arrow 1128\": a number in it is said digit by digit, and ATC hears you say it so. Blank: LocalTC's.": "按 ATC 应读的方式填写，例如“ita arrow 1128”：数字逐位读出，你这样说时 ATC 也能听懂。留空：使用 LocalTC 的读法。",
+"Clear": "清除",
+"Taxi given by the online controller": "在线管制员给出的滑行路线",
+"Taxi route cleared": "滑行路线已清除",
+"Taxi route on the map": "滑行路线已显示在地图上",
+"Taxiways: M C H GE": "滑行道：M C H GE"
 }
