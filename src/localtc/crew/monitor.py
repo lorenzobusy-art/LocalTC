@@ -1472,7 +1472,11 @@ class Monitor(WatchMixin):
         if self.book is None:
             self._call(f"nochecklist:{t:.0f}", ROUTINE, t, "I don't have a checklist for this aircraft.")
             return
-        cl = self.book.get(name) if name else self._next_due()
+        offered = self.offer.value if self.offer is not None and self.offer.kind == "checklist" \
+            and t <= self.offer.until else None
+        # A checklist asked for without a name heard ("Officer's on checklist" just after "After start checklist?"):
+        # the one just offered, not the phase's next (Parking, with the engines just started).
+        cl = self.book.get(name) if name else (self.book.get(offered) if offered else None) or self._next_due()
         if cl is None:
             self._call(f"nochecklist:{name}:{t:.0f}", ROUTINE, t, f"There's no {name.replace('_', ' ')} checklist for this aircraft."
                        if name else "Which checklist?")
@@ -1483,7 +1487,9 @@ class Monitor(WatchMixin):
 
     def _next_due(self) -> "Checklist | None":
         """The first checklist not read yet of the phase the flight is in or just past."""
-        order = {"PARKED": ("cockpit_prep", "before_start", "parking", "securing"), "PUSHBACK": ("before_start", "after_start"),
+        # Engines started before the flight (pushed back and parked again): after start comes before parking.
+        engines = self.c.systems is not None and self.c.systems.engines_running > 0 and self.f.landing_t is None
+        order = {"PARKED": ("cockpit_prep", "before_start", *(("after_start",) if engines else ()), "parking", "securing"), "PUSHBACK": ("before_start", "after_start"),
                  "TAXI_OUT": ("after_start", "taxi", "line_up"), "RUNWAY_HOLD": ("line_up",), "TAKEOFF": ("line_up",),
                  "DEPARTURE": ("after_takeoff",), "CRUISE": ("cruise", "descent"), "ARRIVAL": ("descent", "approach"),
                  "APPROACH": ("approach", "landing"), "LANDING": ("landing",), "TAXI_IN": ("after_landing", "parking")}

@@ -307,7 +307,7 @@ def match_intents(tokens: list[Token]) -> list[IntentMatch]:
     landing = _has_any(tokens, ("clear", "to", "land"), ("cleared", "to", "land"), ("clearance", "to", "land"),
                        ("landing", "clearance"), ("clear", "for", "landing"), ("cleared", "for", "landing"))
     if _has_any(tokens, ("clearance",), ("ifr", "to"), ("i", "f", "r", "to"), ("ready", "to", "copy"), ("request", "ifr"),
-                ("requesting", "ifr"), ("as", "filed"),
+                ("requesting", "ifr"), ("as", "filed"), ("request", "ifrs"), ("ifrs", "file"),  # "request IFRS file"
                 # speech-to-text: "request I for to Orlando", "request eye for", "request IF are"
                 ("request", "i", "for"), ("request", "eye", "for"), ("request", "if", "are"), ("i", "for", "to"))             and not _has_any(
         tokens, ("cleared",), ("taxi",),  # "Clearance, request taxi": the station's name, not an IFR request
@@ -424,7 +424,11 @@ def match_intents(tokens: list[Token]) -> list[IntentMatch]:
     if any(t.text in CONDITION_WORDS for t in tokens) and not asking:
         add("report_conditions", conditions=" ".join(t.text for t in tokens if t.kind == "word" and t.text in (
             *CONDITION_WORDS, "light", "moderate", "severe", "occasional", "continuous")))
-    if _has_any(tokens, *checkin_words) and not _instructed(tokens):
+    # "Malpensa Clearance, hello, Itarrow 1128 with you, request IFR as filed": the "with you" greets; the request is
+    # the call (it was taken for two intents, and the model answered "unable, information not available").
+    ifr_asked = any(m.intent == "request_ifr_clearance" for m in matches) and _has_any(
+        tokens, ("request", "ifr"), ("request", "ifrs"), ("requesting", "ifr"), ("as", "filed"), ("ifrs", "file"))
+    if _has_any(tokens, *checkin_words) and not _instructed(tokens) and not ifr_asked:
         reported = _reported_altitudes(tokens)
         add("checkin", altitude=reported[0] if reported else None, assigned=reported[1] if len(reported) > 1 else None,
             atis=_atis(tokens), **vfr)
@@ -449,6 +453,9 @@ def match_intents(tokens: list[Token]) -> list[IntentMatch]:
                                 ("give", "way"), ("giving", "way"), ("have", "the", "traffic"), ("behind", "the"),
                                 ("continue", "approach"), ("continuing", "approach"), ("continuing",)):
         add("acknowledge")  # "hold position, B737 crossing" / "give way to the A320": the pilot waits, nothing to answer
+    if not matches and _has_any(tokens, ("expect", "runway"), ("expecting", "runway"), ("expect", "a", "runway")) \
+            and runways(tokens) and not _has_any(tokens, *REQUEST_WORDS) and not _has_any(tokens, ("can", "we"), ("could", "we")):
+        add("acknowledge")  # "expect runway 35L, Itarrow 1128": ATC's "expect runway 35L" said back, nothing to answer
     if not matches and _has_any(tokens, ("roger",), ("wilco",), ("copy",), ("will", "comply"), ("disregard",), ("thanks",),
                                 ("thank", "you"), ("affirm",), ("affirmative",), ("copy", "that"), ("good", "day"),
                                 ("stand", "by"), ("standby",), ("standing", "by"), ("will", "stand", "by"),

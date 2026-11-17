@@ -236,3 +236,103 @@ def test_a_descent_at_pilots_discretion_is_marked_until_another_level_is_given()
     engine.discretion_alt = 8000
     engine._assign(altitude_ft=6000)
     assert engine.discretion_alt is None
+
+
+# --- Malpensa to Charles de Gaulle on IVAO: what speech-to-text made of the readbacks ------------------------------
+
+
+def _read(text, instruction_id, expected, callsign="ITY1128"):
+    from localtc.atc_core.readback.interpreter import GrammarInterpreter, InterpretContext, PendingReadback
+    from localtc.atc_core.session import Callsign
+
+    pending = PendingReadback(instruction_id, "center", expected, tuple(expected))
+    return GrammarInterpreter().interpret(text, pending, InterpretContext(callsign=Callsign.named(callsign)))
+
+
+def test_frequencies_with_two_written_to_or_a_comma_before_decimal_are_heard_whole():
+    from localtc.atc_core.readback.extract import frequencies
+    from localtc.atc_core.readback.normalize import normalize
+
+    assert frequencies(normalize("Contact Switzerland Radar 1, 3, 5 decimal 6 to 5 Itarrow 12-day.")) == [135.625]
+    assert frequencies(normalize("contact Malpensa Ground 1 to 1 decimal 8 to 5 day")) == [121.825]
+    assert frequencies(normalize("Contact ground, 1, 2, 1, decimal 8, 2, 5, Itarrow 1128, good day.")) == [121.825]
+    assert [str(t) for t in normalize("climb to 5000")] == ["climb", "to", "<5000>"]  # "to" stays a word elsewhere
+    assert [str(t) for t in normalize("2 to 5 miles")] == ["<2>", "to", "<5>", "miles"]
+
+
+def test_a_flight_level_read_back_without_flight_or_misheard_is_read_back():
+    for said in ("Climb for level 340 Itarrow 1128.", "Climb to level 340 Itarrow 1128.", "Continue 340 Itarrow 1128.",
+                 "We're going to climb to level 340 Itarrow 1128."):
+        assert _read(said, "common.climb", {"altitude": 34000}).status == "correct", said
+    assert _read("Climb to flow 170. Itarrow 1128.", "common.climb", {"altitude": 17000}).status == "correct"
+    assert _read("Mante infra level 0, 9R, 0. Itarrow 1128.", "common.read_back", {"altitude": 9000}).status == "correct"
+    wrong = _read("Climb to flight level 240 Itarrow 1128.", "common.climb", {"altitude": 34000})
+    assert wrong.status == "incorrect" and wrong.mismatched == {"altitude": 24000}
+
+
+def test_gulf_is_golf_and_a_fix_said_as_it_sounds_is_the_fix():
+    taxi = _read("Holding point Gulf Echo runway 35L via M, C, H, Gulf Echo, Itarrow 1128.", "ground.taxi_out_at",
+                 {"taxi_route": ("M", "C", "H", "GE")})
+    assert taxi.status == "correct"
+    assert _read("Direct dog of Itarrow 1128.", "common.direct", {"fix": "DOGUB"}).status == "correct"
+    assert _read("Direct dogma Itarrow 1128.", "common.direct", {"fix": "DOGUB"}).status == "incorrect"
+
+
+def test_ifr_as_filed_heard_as_ifrs_file_with_a_hello_is_the_request_and_expect_runway_said_back_is_nothing():
+    from localtc.atc_core.readback.interpreter import GrammarInterpreter, InterpretContext
+    from localtc.atc_core.session import Callsign
+
+    ctx = InterpretContext(callsign=Callsign.named("ITY1128"))
+    first = GrammarInterpreter().interpret("Malpensa Clearance Hello Itarrow 1128 with you. Request IFRS file.", None, ctx)
+    assert first.intent == "request_ifr_clearance" and not first.needs_fallback
+    for said in ("Expector runway 35L Itarrow 1128.", "Expect runway 35L, Itarrow 1128."):
+        assert GrammarInterpreter().interpret(said, None, ctx).intent == "acknowledge", said
+    assert GrammarInterpreter().interpret("Request runway 35L", None, ctx).intent == "request_runway"
+
+
+def test_the_handoff_read_back_on_the_old_frequency_isnt_sent_on_again():
+    import re
+
+    from test_engine import say, transmissions
+
+    engine, own = parked_engine(destination="KBFI", cruise_ft=12000)
+    (cleared,) = transmissions(say(engine, own, 5, "Paine Clearance, 172LT, IFR to Boeing Field, ready to copy"))
+    alt = re.search(r"maintain ([\d,]+)", cleared.text).group(1)
+    squawk = re.search(r"squawk (\d{4})", cleared.text).group(1)
+    dep = re.search(r"departure frequency ([\d.]+)", cleared.text).group(1)
+    (done,) = transmissions(say(engine, own, 30, f"cleared to Boeing Field, maintain {alt}, expect 12,000, departure {dep}, "
+                                                 f"squawk {squawk}, 2LT"))
+    ground = re.search(r"Ground ([\d.]+)", done.text).group(1)
+    assert transmissions(say(engine, own, 50, f"Ground {ground}, 2LT, good day")) == []
+    (reminder,) = transmissions(say(engine, own, 70, "request taxi, 2LT"))  # anything else: sent on, as before
+    assert "Ground" in reminder.text
+
+
+def test_no_clearance_alerts_while_on_the_online_networks_controller():
+    from localtc.sim_api import AtcAlert, PhaseChanged
+
+    engine, own = parked_engine(online_network="ivao")
+    engine.state.flight.origin = engine.state.flight.origin or "KPAE"
+    engine.online_tuned = SimpleNamespace(callsign="KPAE_GND", frequency_mhz=own.com1_mhz)
+    engine.state.phase = "TAXI_OUT"
+    out = engine._on_phase_change(PhaseChanged(t=5, previous="PARKED", phase="TAXI_OUT"), own)
+    assert not [o for o in out if isinstance(o, AtcAlert) and o.kind.endswith("without_clearance")]
+    engine.online_tuned = None
+    out = engine._on_phase_change(PhaseChanged(t=6, previous="PARKED", phase="TAXI_OUT"), own)
+    assert [o.kind for o in out if isinstance(o, AtcAlert)] == ["taxi_without_clearance"]
+
+
+def test_a_checklist_asked_for_unheard_is_the_one_just_offered():
+    from test_crew_monitor import crew, said, systems
+    from test_crew_monitor import own as cockpit
+
+    from localtc.crew.monitor import Offer
+    from localtc.sim_api import IntercomHeard, PhaseChanged
+
+    pm = crew()
+    pm.observe(PhaseChanged(t=0.5, previous="PUSHBACK", phase="PARKED"))
+    pm.observe(systems(0.6))
+    pm.observe(cockpit(1, parking_brake=True))
+    pm.monitor.f.checklists.update({"cockpit_prep", "before_start"})
+    pm.monitor.offer = Offer("checklist", "after_start", 60.0)
+    assert said(pm.observe(IntercomHeard(t=2, text="Officer's on checklist.")))[0].startswith("After start checklist.")

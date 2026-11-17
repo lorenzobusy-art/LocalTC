@@ -106,6 +106,21 @@ a new minor version adds features, a patch fixes them.
   instead of ATC's "say again".
 
 ### Fixed
+- **Readbacks as speech-to-text writes them:**
+  - frequencies with "two" written "to" ("135 decimal 6 to 5") or a comma before "decimal" ("1, 2, 1, decimal 8, 2,
+    5") are heard whole. They were heard as 135.6, and the handoff got "negative";
+  - a flight level said back without "flight" or with it misheard ("climb to level 340", "for level 340", "flow 170",
+    "continue 340", "infra level 0, 9R, 0") is read back. The climb used to be given again;
+  - "Gulf" is Golf (taxiway "Gulf Echo" is GE), and a fix said as it sounds ("direct dog of" for DOGUB) is the fix.
+- **"Request IFRS file" with a "hello, with you"** is the IFR clearance request. It used to get "unable, information
+  not available".
+- **Reading back a handoff on the old frequency** ("Ground 121.825, good day" after "readback correct, contact Ground
+  when ready") isn't answered with "contact Ground" again.
+- **"Expect runway 35L" said back** needs no answer. It used to go to the language model, which answered "unable".
+- **No "landed without a landing clearance" on IVAO or VATSIM:** with the network's controller, LocalTC no longer
+  flags a taxi, takeoff or landing without its own clearance.
+- **A checklist asked for but not heard clearly** is the one the copilot just offered, and with the engines started
+  after pushback, After start comes before Parking.
 - **A crossing restriction is said again as one:** a readback of "cross NORNI at 8,000 feet" that missed the fix got
   "cross NORNI at 8,000 feet" again, not "negative, I say again, direct NORNI" (a clearance the flight wasn't
   given); and a fix heard with an article or as it sounds ("cross a normie" for NORNI) is the fix given.

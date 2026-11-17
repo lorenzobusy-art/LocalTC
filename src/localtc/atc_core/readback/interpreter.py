@@ -132,7 +132,7 @@ def after_correction(tokens: list) -> list:
 
 
 # Words that ask for the IFR clearance itself, not just name the Clearance station.
-CLEARANCE_ASKED = (("ifr",), ("i", "f", "r"), ("ready", "to", "copy"), ("request", "clearance"), ("requesting", "clearance"),
+CLEARANCE_ASKED = (("ifr",), ("ifrs",), ("i", "f", "r"), ("as", "filed"), ("ready", "to", "copy"), ("request", "clearance"), ("requesting", "clearance"),
                    ("clearance", "to"), ("our", "clearance"), ("for", "clearance"),  # ("the", ...): "the" is dropped
                    ("clearance", "please"), ("need", "clearance"), ("get", "clearance"))
 

@@ -147,10 +147,21 @@ def normalize_runway(ident: str) -> str:
 
 
 MAX_ALTITUDE_FT = 60000
+FLIGHT_SOUNDS = {"for", "flow", "fly", "play", "infra", "fray", "fright", "flat"}  # "flight" as speech-to-text heard it
 
 
 def _altitude_value(tokens: list[Token], i: int) -> int | None:
     # "flight level 350", or "FL350" the way it is written on the screen and typed back.
+    # Speech-to-text's "flight" ("climb to flow 170", "for level 340", "fly level", "infra level") or none at all
+    # ("climb to level 340"): a flight level all the same.
+    if i + 1 < len(tokens) and tokens[i].text in FLIGHT_SOUNDS and tokens[i + 1].text == "level":
+        i += 1
+    if i < len(tokens) and tokens[i].text == "level" and (num := _number(tokens, i + 1)) is not None and num.isdigit() \
+            and 2 <= len(num) <= 3:
+        return int(num) * 100
+    if i < len(tokens) and tokens[i].text == "flow" and (num := _number(tokens, i + 1)) is not None and num.isdigit() \
+            and len(num) == 3 and 100 <= int(num) <= 600:
+        return int(num) * 100
     spelled = i < len(tokens) and tokens[i].text == "flight" and i + 1 < len(tokens) and tokens[i + 1].text == "level"
     short = i < len(tokens) and tokens[i].text == "fl" and _number(tokens, i + 1) is not None
     if spelled or short:
@@ -209,6 +220,9 @@ def altitudes(tokens: list[Token], expected: Any = None) -> list[int]:
         # only a stated flight level, so "up to five thousand" is still too vague to accept.
         levels = [i for i, token in enumerate(tokens) if token.text == "flight" and i + 1 < len(tokens)
                   and tokens[i + 1].text == "level" and (i == 0 or tokens[i - 1].text != "expect")]
+        # ... or "level 340" with "flight" lost or misheard ("infra level 0, 9R, 0").
+        levels += [i for i, token in enumerate(tokens) if token.text == "level" and (i == 0 or tokens[i - 1].text
+                   not in ("expect", "flight")) and not (i >= 2 and tokens[i - 2].text == "expect")]
         if any((value := _altitude_value(tokens, i)) is not None and _bare_flight_level(value, expected) == int(expected)
                for i in levels):
             found.append(int(expected))
@@ -216,7 +230,9 @@ def altitudes(tokens: list[Token], expected: Any = None) -> list[int]:
                                                             ("leaving",), ("out", "of")):
         # "Six thousand five hundred, Air Canada 779": the altitude alone, as pilots read one back. Taken only when
         # it's the altitude ATC gave, and not a report of where the aircraft is ("out of 4,000", "climbing 6,500").
-        if any(t.kind == "number" and _altitude_value(tokens, i) == int(expected) for i, t in enumerate(tokens)):
+        # ("Continue 340" for FL340: the level without "flight level".)
+        if any(t.kind == "number" and (value := _altitude_value(tokens, i)) is not None
+               and _bare_flight_level(value, expected) == int(expected) for i, t in enumerate(tokens)):
             found.append(int(expected))
     return found
 
@@ -785,9 +801,9 @@ def fixes(tokens: list[Token], expected: Any = None) -> list[str]:
                 if not w.isalpha() or len(joined) > len(expected) + 1:
                     break
                 if joined[:1] == expected[:1].upper() and abs(len(joined) - len(expected)) <= 1 \
-                        and max(difflib.SequenceMatcher(None, joined, expected.upper()).ratio(),
-                                difflib.SequenceMatcher(None, _as_heard(joined), _as_heard(expected)).ratio()) \
-                        >= FIX_LIKENESS:
+                        and (max(difflib.SequenceMatcher(None, joined, expected.upper()).ratio(),
+                                 difflib.SequenceMatcher(None, _as_heard(joined), _as_heard(expected)).ratio())
+                             >= FIX_LIKENESS or _sounds_like(joined, expected)):
                     said = True
                     break
             if said:
@@ -993,6 +1009,18 @@ def values_equal(element: str, heard: Any, expected: Any) -> bool:
 def _as_heard(name: str) -> str:
     """A fix's name as it sounds at the end: "normie", "norny" and NORNI all end in the same "ee"."""
     return re.sub(r"(?:IE|EE|EY|Y)$", "I", name.upper())
+
+
+SOUNDS = str.maketrans({**dict.fromkeys("AEIOUY", "*"), **dict.fromkeys("BPFV", "B"), "T": "D",
+                        **dict.fromkeys("CKQG", "K"), "Z": "S", "N": "M"})
+
+
+def _sounds_like(heard: str, expected: str) -> bool:
+    """ "Dog of" for DOGUB: the same consonants, said alike (B and F, D and T, K and G...), with the vowels in
+    the same places. Five letters or more and the first three the same, so short names stay strict."""
+    heard, expected = heard.upper(), expected.upper()
+    return len(expected) >= 5 and len(heard) == len(expected) and heard[:3] == expected[:3] \
+        and heard.translate(SOUNDS) == expected.translate(SOUNDS)
 
 
 def fix_matches(heard: str, expected: str) -> bool:

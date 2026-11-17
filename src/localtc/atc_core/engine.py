@@ -1861,7 +1861,9 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
             gate = stands.parked_at(geo, own.lat, own.lon, self._real_gates(geo.icao)) if geo is not None else None
             self._assign(departure_gate=gate.display if gate is not None else None)
         # Only where there's a controller to clear it: an untowered field's pilots announce themselves on the CTAF.
-        if phase is P.TAXI_OUT and change.previous in (P.PARKED, P.PUSHBACK) and "taxi" not in st.clearances \
+        if self.online_muted:
+            pass  # With the online network's controller (IVAO, VATSIM): their clearances, not LocalTC's to miss.
+        elif phase is P.TAXI_OUT and change.previous in (P.PARKED, P.PUSHBACK) and "taxi" not in st.clearances \
                 and st.flight.origin and self._staffed(st.flight.origin, "ground", "tower"):
             out.append(self._alert(t, "taxi_without_clearance", "moving without a taxi clearance"))
             ground = self.facility("ground")
@@ -3519,6 +3521,12 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
             # said "contact Milan Radar Departure"): the handoff said again, not "say again".
             st.exchanges.append(Exchange(t, "pilot", facility.controller, ev.text, None))
             self._schedule(t, "common.contact", {"station": to.station, "frequency": to.mhz}, facility, handoff_to=to)
+            return []
+        if pending is None and (new := self._handed_off_from(facility)) is not None \
+                and any(new.matches(f) for f in frequencies(normalize(ev.text))):
+            # "Contact Ground 121.825, good day": the handoff read back (one that wanted none, "readback correct,
+            # contact Ground when ready"), not a call. Nothing to say; it used to get "contact Ground" again.
+            st.exchanges.append(Exchange(t, "pilot", facility.controller, ev.text, None))
             return []
         if pending is None and self._handed_off_from(facility) is not None and "emergency" not in st.flags \
                 and not any(m.intent == "emergency" for m in match_intents(normalize(ev.text))) \

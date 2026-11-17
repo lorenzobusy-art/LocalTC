@@ -23,7 +23,7 @@ TENS_WORDS = {"twenty": 20, "thirty": 30, "forty": 40, "fifty": 50, "sixty": 60,
 MULTIPLIERS = {"hundred": 100, "thousand": 1000}
 POINT_WORDS = {"point", "decimal", "."}
 PHONETIC = {
-    "alpha": "a", "alfa": "a", "bravo": "b", "charlie": "c", "charley": "c", "delta": "d", "echo": "e", "foxtrot": "f", "golf": "g",
+    "alpha": "a", "alfa": "a", "bravo": "b", "charlie": "c", "charley": "c", "delta": "d", "echo": "e", "foxtrot": "f", "golf": "g", "gulf": "g",
     "hotel": "h", "india": "i", "juliet": "j", "juliett": "j", "kilo": "k", "lima": "l", "mike": "m",
     "november": "n", "oscar": "o", "papa": "p", "quebec": "q", "romeo": "r", "sierra": "s", "tango": "t",
     "uniform": "u", "victor": "v", "whiskey": "w", "whisky": "w", "xray": "x", "x-ray": "x", "yankee": "y", "zulu": "z",
@@ -48,6 +48,12 @@ def normalize(text: str) -> list[Token]:
     # After "point", a digit is what was said, whatever speech-to-text spelled: "125 decimal to" is 125.2.
     lowered = re.sub(r"\b(point|decimal) (?:to|too)\b", r"\1 two", lowered)
     lowered = re.sub(r"\b(point|decimal) (?:for|fore)\b", r"\1 four", lowered)
+    # "1, 2, 1, decimal 8, 2, 5": the comma before "decimal" doesn't end the frequency.
+    lowered = re.sub(r"(\d)\s*,\s*(point|decimal)\b", r"\1 \2", lowered)
+    # "Niner" written "9R" ("flight level 0, 9R, 0"): the digit.
+    lowered = re.sub(r"\b9r\b", "9", lowered)
+    lowered = re.sub(r"\bexpector\b", "expect a", lowered)  # "expect a runway 35L" run together
+    lowered = _two_between_digits(lowered)
     lowered = re.sub(r"\b(?:an? )?(?:i less|eye less|i l s|i els|iless)\b", "an ils", lowered)  # "an I-less for 26 left"
     # "Runway 22 to the left" is speech-to-text's "22 left" (it was read as a pushback "tail left").
     lowered = re.sub(r"\b(runway \w+(?: \w+)?) to the (left|right|center|centre)\b", r"\1 \2", lowered)
@@ -105,6 +111,26 @@ def normalize(text: str) -> list[Token]:
             tokens.append(Token("word", word))
     flush()
     return tokens
+
+
+TWO_RE = re.compile(r"(?<![\d.,])(\d) (?:to|too) (\d)(?![\d,]?\d)")
+
+
+def _two_between_digits(text: str) -> str:
+    """ "1 to 1 decimal 8 to 5": "two" said between digits said one by one, written "to". Only inside a
+    frequency or a run of single digits (a digit or "decimal" next to it), never "climb to 5" or "1 to 2 miles"."""
+    def two(m: re.Match[str]) -> str:
+        before = text[: m.start()].rstrip(" ,")
+        after = text[m.end():].lstrip(" ,")
+        inside = re.search(r"(?:\b\d|point|decimal)$", before) or re.match(r"(?:\d\b|point|decimal)", after)
+        return f"{m.group(1)} 2 {m.group(2)}" if inside else m.group(0)
+
+    for _ in range(3):  # overlapping ("6 to 2 to 5")
+        new = TWO_RE.sub(two, text)
+        if new == text:
+            break
+        text = new
+    return text
 
 
 def _single_digit(word: str) -> bool:
