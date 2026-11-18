@@ -78,6 +78,7 @@ log = logging.getLogger(__name__)
 
 NETWORK_TRAFFIC_NM = 250.0  # the online network's pilots drawn on the Live Map this far around the flight
 RADIO_HISTORY = 400
+PANEL_LINES = 60  # the radio log's lines the sim's panel shows
 COMPONENTS = ("ollama", "gpu", "webview2")  # installed from the app (localtc.components), as the models are
 OWN_EVERY_S = 0.25
 FLIGHT_EVERY_S = 1.0
@@ -118,7 +119,9 @@ class AppController:
             self.cfg.voice.enabled = True  # the app is for flying with a microphone; the CLI asks with --voice
         self.stream = EventStream(lambda: self.on_connect())  # a page that fell behind starts again from all of it
         self.plan_path = plan_path or data_dir() / "flightplan.json"
-        self.plan: FlightPlan | None = load_plan(self.plan_path)
+        # The last flight's plan only while it's young (LocalTC restarted mid-flight carries on with it): a day-old
+        # one opened the app with its destination, flight number and aircraft already filled in.
+        self.plan: FlightPlan | None = load_plan(self.plan_path) if _young(self.plan_path) else None
         self.cache = cache or AirportCache()
         self.live: LiveSession | None = None
         self.status, self.status_detail = "idle", ""
@@ -169,6 +172,7 @@ class AppController:
         get, post = "GET", "POST"
         return {
             (get, "state"): self.api_state,
+            (get, "panel"): self.api_panel,
             (post, "flight/start"): self.api_start,
             (post, "window/show"): self.api_window_show,
             (post, "flight/stop"): self.api_stop,
@@ -206,6 +210,7 @@ class AppController:
             (get, "zones"): self.api_zones,
             (get, "airport/layout"): self.api_layout,
             (get, "clip"): self.api_clip,
+            (get, "logo"): self.api_logo,
             (get, "airports/search"): self.api_search,
             (get, "airports/around"): self.api_airports_around,
             (post, "dev/note"): self.api_note,
@@ -381,8 +386,8 @@ class AppController:
             # that has seen the welcome already.
             "setup": not self.cfg.ui.setup_done and not self.cfg.ui.welcome_seen,
             "whats_new": self._whats_new(),
-            # VATSIM/IVAO beside LocalTC: on, the ATC tab asks which (``network`` "" until chosen); what's online.
-            "online": {"integration": self.cfg.atc.online_integration, "network": self.cfg.atc.online_network,
+            # VATSIM/IVAO beside LocalTC: on, the ATC tab has the choice (Only LocalTC unless changed); what's online.
+            "online": {"integration": self.cfg.atc.online_integration, "network": self.cfg.atc.online_network or "local",
                        **self.online_view},
         }
 
@@ -470,8 +475,6 @@ class AppController:
     async def start(self) -> None:
         if self._task is not None and not self._task.done():
             raise HttpError(409, "a flight is already running")
-        if self.cfg.atc.online_integration and not self.cfg.atc.online_network:
-            raise HttpError(409, "Choose Only LocalTC, VATSIM hybrid or IVAO hybrid on the ATC tab before starting the flight")
         self.online_view = {}
         if self.source_kind == "live" and next_shift(self.cfg.ui.last_flight_end, self.cfg.atc.shift, time.time()) != self.cfg.atc.shift:
             self.cfg.atc.shift += 1  # back after a break: other controllers on (saved with the flight count)
@@ -479,6 +482,10 @@ class AppController:
         if self._clear_task is not None:
             self._clear_task.cancel()
             self._clear_task = None
+        if self.cfg.copilot.mode != "off":
+            # Every flight starts with the copilot off the radio, whatever the last one ended with ("copilot radio, no
+            # matter what, off by default"): it's switched on in the flight when wanted.
+            self.cfg.copilot.mode = "off"
         cfg = self.flight_config()
         record = cfg.recorder.enabled or cfg.ui.dev_mode
         self._stop = asyncio.Event()
@@ -708,7 +715,7 @@ class AppController:
         name = lambda g: (self.airports.get(g.airport.icao).name if self.airports.get(g.airport.icao) else g.airport.name)  # noqa: E731
         return {
             "airline": TELEPHONY.get(code, "") if code else "", "airline_icao": code, "iata": iata,
-            "logo": f"https://pics.avs.io/200/60/{iata}.png" if iata else "",
+            "logo": f"/api/logo?iata={iata}" if iata else "",  # (through the app: the page clears its white)
             "flight": f"{iata or code} {number}".strip() if code else callsign, "callsign": callsign,
             "aircraft": speech.aircraft_type(kind)[0] or kind, "type": kind,
             "origin": snap.origin, "origin_name": name(origin) if origin is not None else "",
@@ -745,6 +752,11 @@ class AppController:
                              "hdg": round(t.hdg_true), "gs": round(t.gs_kt), "ground": t.on_ground} for t in ev.targets]
             self.publish("traffic", self.traffic)
             return
+        if isinstance(ev, PhaseChanged) and ev.phase == "PARKED" and ev.previous == "TAXI_IN" and self.source_kind == "live":
+            try:  # arrived: the plan isn't the next flight's, even if the app's closed before the flight is ended
+                self.plan_path.unlink(missing_ok=True)
+            except OSError:
+                pass
         if isinstance(ev, OnlineAtc | RadioTuned | PhaseChanged | AtcOperations) or (
                 isinstance(ev, AtcAlert) and ev.kind in ("online", "online_back", "online_gap")):
             self._online(getattr(ev, "error", None))
@@ -803,6 +815,27 @@ class AppController:
         if isinstance(ev, IntercomHeard):
             return bool(ev.text) and ev.source == "voice"
         return False
+
+    async def api_logo(self, args: dict) -> Raw:
+        """An airline's logo (pics.avs.io's PNG by its IATA code), passed through, so the page can clear the white round
+        it (a picture from another site can't be read). Kept for the session."""
+        import re
+        import urllib.request
+
+        iata = str(args.get("iata", "")).upper()
+        if not re.fullmatch(r"[A-Z0-9]{2}", iata):
+            raise HttpError(404, "No such airline code.")
+        cache = self.__dict__.setdefault("_logos", {})
+        if iata not in cache:
+            def fetch() -> bytes:
+                req = urllib.request.Request(f"https://pics.avs.io/200/60/{iata}.png", headers={"User-Agent": "LocalTC"})
+                with urllib.request.urlopen(req, timeout=10) as r:  # noqa: S310 - a fixed https host
+                    return r.read(500_000)
+            try:
+                cache[iata] = await asyncio.to_thread(fetch)
+            except Exception as exc:  # noqa: BLE001 - no logo, no harm: the badge shows instead
+                raise HttpError(404, f"No logo: {exc}") from exc
+        return Raw("image/png", cache[iata])
 
     async def api_clip(self, args: dict) -> Raw:
         """A kept transmission's audio (8 kHz WAV), by its radio line's ``audio`` id."""
@@ -929,6 +962,18 @@ class AppController:
 
     async def api_state(self, args: dict) -> dict:
         return self.state()
+
+    async def api_panel(self, args: dict) -> dict:
+        """What the sim's toolbar panel shows (``static/panel.html``, for VR): the radio log's last lines and the radios.
+        ``after``: only the lines newer than this time."""
+        after = float(args.get("after") or -1e18)
+        lines = [line for line in list(self.radio)[-PANEL_LINES:] if float(line.get("t") or 0.0) > after]
+        own = self.own or {}
+        out = {"radio": lines, "com1": own.get("com1"), "com2": own.get("com2"), "squawk": own.get("squawk"),
+               "flying": self.live is not None}
+        if after < -1e17:
+            out["language"] = self.state().get("language") or "en"  # (the first call: the page's words in it)
+        return out
 
     async def api_window_show(self, args: dict) -> dict:
         """LocalTC started again while it's running: this one's window comes up instead (ui/instance.py)."""
@@ -1144,7 +1189,7 @@ class AppController:
         if cfg.voice.cabin_key and cfg.voice.cabin_key in (cfg.voice.ptt_key, cfg.voice.intercom_key):
             raise HttpError(400, "The cabin key can't be the push-to-talk key or the intercom key")
         if cfg.atc.online_integration and not self.cfg.atc.online_integration:
-            cfg.atc.online_network = ""  # turned on: the ATC tab asks which network before the next flight
+            cfg.atc.online_network = "local"  # turned on: still LocalTC alone until a network is picked on the ATC tab
         path = await asyncio.to_thread(save_settings, cfg, base=load_config(self.config_path, settings=None))
         live_now = self.live is not None
         interpreter = getattr(self.live.engine, "interpreter", None) if self.live is not None else None
@@ -1456,21 +1501,22 @@ class AppController:
         airport = geo.airport if geo is not None else (self.airports.get(icao) or await asyncio.to_thread(self.cache.get, icao))
         if airport is None:
             raise HttpError(404, f"No data for {icao} yet.")
-        use, closed = None, None
+        use, closed, closed_runways = None, None, frozenset()
         if geo is not None:
             from localtc.ui.airport_layout import runway_use
 
             info = engine.current_atis(icao)
-            if info is not None and info.operations is not None:  # the runways in use and the closed taxiways
+            if info is not None and info.operations is not None:  # the runways in use, the closed runways and taxiways
                 use = runway_use(info.operations.landing, info.operations.departing)
                 closed = engine.closed_taxiways(icao)
+                closed_runways = frozenset(info.operations.closed_runways)
         gate_map = None
         if geo is not None and hasattr(engine, "gate_map"):
             try:
                 gate_map = engine.gate_map(icao)
             except Exception:  # noqa: BLE001 - the gates by the scenery's names instead
                 log.debug("No gate map for %s", icao, exc_info=True)
-        return await asyncio.to_thread(layout, airport, gate_map, use=use, closed=closed)
+        return await asyncio.to_thread(layout, airport, gate_map, use=use, closed=closed, closed_runways=closed_runways)
 
     async def api_zones(self, args: dict) -> dict:
         """The Live Map's ATC layer: who works which airspace, and who the flight is talking to."""
@@ -1929,6 +1975,16 @@ def _recent_sessions(root: Path, limit: int = 15) -> list[dict]:
         out.append({"name": d.name, "path": str(d.resolve()), "size_mb": round(size / 2**20, 1),
                     "modified": datetime.fromtimestamp(d.stat().st_mtime).isoformat(timespec="minutes")})
     return out
+
+
+PLAN_KEEP_S = 18 * 3600.0  # a saved plan older than this isn't put back when the app opens (a long haul restarted is younger)
+
+
+def _young(path: Path) -> bool:
+    try:
+        return time.time() - path.stat().st_mtime <= PLAN_KEEP_S
+    except OSError:
+        return False
 
 
 def export_report(session_dir: Path, plan_path: Path | None = None, *, out_dir: Path | None = None,

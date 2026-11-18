@@ -70,8 +70,9 @@ def test_said_done_at_once_when_the_captain_answers_with_it_set():
     assert " ".join(said(out)) == "Parking brake, set. Takeoff speeds and thrust?"
 
 
-def test_the_captains_setting_is_read_as_it_shows_and_tcas_set_by_the_copilot():
-    """An item left to the captain (PACKS 1 & 2 ... AS RQRD) and read from the switches: said as it stands, and on."""
+def test_the_captains_setting_is_read_as_it_shows_and_tcas_left_to_the_captain():
+    """An item left to the captain (PACKS 1 & 2 ... AS RQRD) and read from the switches: said as it stands, and on.
+    The transponder is the captain's too (the copilot never sets it): still to do until it shows TA/RA."""
     pm, _ = fenix()
     pm.observe(PhaseChanged(t=0.5, previous="TAXI_OUT", phase="RUNWAY_HOLD"))
     pm.observe(systems(0.6))
@@ -80,9 +81,11 @@ def test_the_captains_setting_is_read_as_it_shows_and_tcas_set_by_the_copilot():
                                            "L:S_OH_PNEUMATIC_PACK_2": 0.0}))
     pm.observe(IntercomHeard(t=2, text="line up checklist"))
     out = pm.observe(IntercomHeard(t=3, text="one six right, both"))
-    words = " ".join(said(out))
-    assert words == "TCAS, TA or TA/RA, set. Packs 1 and 2, 1 on, 2 off. Line-up checklist complete."
-    assert [o for o in out if isinstance(o, SetSimVar) and o.name == "L:S_XPDR_MODE" and o.value == 2]
+    assert " ".join(said(out)) == "TCAS? Shows standby, still to do."
+    assert not [o for o in out if isinstance(o, SetSimVar) and o.name == "L:S_XPDR_MODE"]
+    pm.observe(AircraftVars(t=3.5, values={"L:S_XPDR_MODE": 2.0}))
+    out = pm.observe(IntercomHeard(t=5, text="set"))
+    assert " ".join(said(out)) == "TCAS, TA/RA. Packs 1 and 2, 1 on, 2 off. Line-up checklist complete."
 
 
 def test_the_switches_in_words():

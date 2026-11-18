@@ -20,6 +20,7 @@ from typing import Any
 
 import msgspec
 
+from localtc.sim_api.geo import bearing_deg, haversine_nm
 from localtc.sim_api.ramp import on_ramp
 from localtc.atc_core import chatter, disfluency, personality, procedures, radio_range, vectors
 from localtc.atc_core import region as regions
@@ -44,6 +45,10 @@ from localtc.atc_core.airport.approaches import (
 )
 from localtc.atc_core.airport.approaches import options as approach_options
 from localtc.atc_core.airspace import Airspace, Area
+from localtc.atc_core.flow import FlowMixin
+from localtc.atc_core.sequencing import SequenceMixin
+from localtc.atc_core.rides import RideMixin
+from localtc.atc_core.airport import charted_visuals
 from localtc.atc_core.diversion import DiversionMixin, DiversionState
 from localtc.atc_core.facilities import (
     Facility,
@@ -114,12 +119,14 @@ from localtc.atc_core.weather import (
 )
 from localtc.sim_api import (
     AircraftIdentity,
+    PilotReports,
     AtcOperations,
     NoticesReport,
     OnlineAtc,
     OnlineController,
     OpsSnapshot,
     TerrainGrid,
+    CabinIncident,
     Airport,
     AirportData,
     ApproachesData,
@@ -190,7 +197,11 @@ SILENT_PILOT_S = 30.0  # an instruction unanswered this long: "how do you read?"
 NUDGE_REPLY_S = 4.0  # after the pilot answers "how do you read", the instruction follows this soon
 STALE_READBACK_S = 45.0  # answered with something else and then quiet this long: repeat it once, then stop waiting
 MISSED_CHECKIN_S = 45.0  # on the new frequency but quiet this long: the controller calls first
-TRAFFIC_NM, TRAFFIC_ALT_FT, TRAFFIC_REPEAT_S = 5.0, 1200.0, 300.0
+# Called in good time (Dubai's "11 o'clock, 3 miles, same direction" was "way too late"), one call a minute at most,
+# and the same aircraft not again (made twice, it was called twice 16 s apart)
+TRAFFIC_NM, TRAFFIC_ALT_FT, TRAFFIC_REPEAT_S = 8.0, 1200.0, 300.0
+TRAFFIC_GAP_S = 60.0
+TRAFFIC_SAME_NM = 2.0  # one called this close to where another was called, a moment ago: the same aircraft
 TRAFFIC_MIN_KT = 40.0  # slower than this and not on the ground: a sim glitch, not something flying
 TRAFFIC_FIELD_NM, TRAFFIC_FIELD_AGL_FT = 5.0, 1000.0  # this low this close to an airport: the tower's, no call
 ORIGIN_NEAR_NM = 6.0  # the plan's origin, while the aircraft is this close to it: the flight starts there
@@ -285,6 +296,9 @@ FACT_TOPICS = {
     "pushback": {"tail", "tails", "tailing", "push", "pushback", "pushing"},
     "squawk": {"squawk", "code", "transponder"},
     "terrain": {"terrain", "mountains", "mountain", "minimum", "safe", "msa", "ground", "high"},
+    "ride": {"ride", "rides", "chop", "choppy", "turbulence", "bumpy", "bumps", "smooth", "smoother", "pirep", "pireps", "icing",
+             "ice", "tops", "reports"},
+    "clearance": {"clearance", "cleared", "confirm", "assigned", "verify"},
 }
 NEARBY_NM = 20.0  # the departure or destination airport this close: the sim's weather here is its weather
 CALLSIGN_ASKED_S = 60.0  # "say again your callsign" -- the callsign, this soon after: the earlier call was this flight's
@@ -343,6 +357,7 @@ LEFT_BEHIND_S = 300.0  # a controller handed off from this long ago is still the
 BREAK_S = 20.0  # an urgent call this soon after ATC's last words to the pilot: "break break", and no readback waited for
 # Of the other flights' calls that start with them (a clearance, a push, a taxi, ready for departure, a final), the
 # share where they call first: it was always the controller first ("why isn't the traffic asking for something?").
+TRANSITION_FT_MIN = 10000.0  # above this, other flights' levels are flight levels (pressure altitudes)
 PILOT_FIRST = 0.7
 CHATTER_REUSE_S = 150.0  # another flight heard again on the same frequency after this long (approach works each a few times)
 CHATTER_REUSE_MAX = 3
@@ -375,6 +390,9 @@ def _emergency_details(text: str | None) -> dict[str, str]:
         out["fuel"] = fuel.group(1)
     return out
 
+INCIDENTS = {"medical": ("a medical emergency on board", "paramedics"), "unruly": ("a disruptive passenger", "police"),
+             "smoke": ("smoke in the cabin", "the fire crews"), "suspicious": ("a security concern on board", "security"),
+             "lavatory": ("a cabin system fault", "maintenance"), "gate_assist": ("a passenger needing assistance", "the assistance team")}
 MIN_TURN_DEG = 12.0  # a smaller correction isn't worth a transmission
 REVECTOR_DEG = 20.0  # a new vector has to differ from the one already given by at least this much
 SPEED_CONTROL_MIN_KT = 175.0  # slower than this and there is nothing to manage
@@ -449,6 +467,15 @@ SECTOR_NEAREST_NM = 150.0  # an airport further away than this names no centre f
 SECTOR_MIN_S = 1200.0  # shortest time on one enroute centre before being handed to the next
 SECTOR_LAST_NM = 250.0  # inside this of the destination the arrival takes over; no more sector changes
 SECTOR_DWELL_S = 30.0  # across a real centre boundary this long before the handoff: not skimming it
+CROSSING_LINE_NEAR_M = 300.0  # a runway's hold line within this is the one to go by
+CROSSING_STRIP_M = 100.0  # this close to a runway's pavement, with no hold line in the airport's data: at the runway
+REGION_ARRIVAL_NM = 400.0  # in no FIR we know of, this near the destination: its phraseology
+SECTOR_DESTINATION_NM = 400.0  # ... and its centre next
+SECTOR_ARRIVAL_NM = 120.0  # ... which still takes the flight this close in
+DESCENT_PAST_NM = 15.0  # this far past where it should have started down: ATC says something
+DESCENT_TOLD_EVERY_S = 150.0
+DESCENT_GIVEN_GRACE_S = 120.0  # a descent given this recently isn't "ignored" yet
+DESCENT_TOLD_MOST = 3
 CROSSING_TREND_S = 2.0  # how far apart two looks at the distance to a runway's hold short line are ...
 CROSSING_CLOSING_M = 3.0  # ... and how much closer the second has to be: heading for it
 SECTOR_BACK_S = 1800.0  # back into the centre left less than this long ago ...
@@ -536,9 +563,18 @@ class _Scheduled:
     worded_by: str = "template"  # "model": ``worded`` is the language model's words for it (checked), said instead
     worded: Phrase | None = None  # ... without the callsign, which the template gives
     lead: Phrase | None = None  # said first, after the callsign: "sorry, Gate 403 is occupied"
+    repeat: bool = False  # said again when asked: in other words than the first time
 
 
-class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMixin, GateRequestsMixin):
+def t_told(told: dict[str, float], key: str, t: float) -> bool:
+    """Whether ``key`` may be told now (``RANGE_TOLD_S`` since the last time), marking it told if so."""
+    if t - told.get(key, -math.inf) < RANGE_TOLD_S:
+        return False
+    told[key] = t
+    return True
+
+
+class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMixin, FlowMixin, SequenceMixin, RideMixin, GateRequestsMixin):
     def __init__(
         self,
         config: EngineConfig | None = None,
@@ -605,6 +641,9 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
         self._tuned_since = 0.0
         self._last_handoff: tuple[float, Facility, Facility] | None = None  # (when, from, to) of the last handoff
         self._crossings: tuple[str, ...] = ()  # runways the taxi route goes across
+        self._ran_onto: str | None = None  # the runway taxied onto without a clearance, not yet left
+        self._descent_told = 0  # times told to start down
+        self._descent_told_t = -math.inf
         self._crossing_seen: dict[str, tuple[float, float]] = {}  # runway: (t, metres to its hold short line) lately
         self._crossed: set[str] = set()  # ... and the ones already cleared to cross (full names, "09/27")
         self._crossing: str | None = None  # the runway cleared across and not yet left behind
@@ -664,6 +703,13 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
         # The ground's height from the ``TerrainGrid`` events (the app's terrain tiles, recorded for the replay): the
         # minimum altitudes ATC vectors and clears to (atc_core/terrain.py). Empty: its usual minimums.
         self.terrain = TerrainModel()
+        self._flow_t: dict[str, float] = {}  # dynamic routing's last times (atc_core/flow.py)
+        self._seq: dict[str, Any] = {}  # the arrival sequence's state (atc_core/sequencing.py)
+        self._pireps: dict[str, PilotReports] = {}  # the pilot reports around the flight's airports (atc_core/rides.py)
+        self._pireps_t = 0.0
+        self.own_reports: list = []  # this flight's own PIREPs
+        self.push_hold = None  # a push held at the gate (sequencing.PushHold)
+        self._variant: dict[str, int] = {}  # the wording last used for each instruction: a repeat says it another way
         self.conditions = ConditionBook()  # the conditions on its clearances (atc_core/conditions.py)
         self._wake_departures: dict[str, tuple[float, str, str]] = {}  # runway: (when, category, type) of a heavy's takeoff
         self._wake_landings: dict[str, tuple[float, str, str]] = {}  # ... and landing
@@ -692,6 +738,7 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
         self._gate_asked = False  # a gate the pilot asked for and got (the gate map): theirs, shown
         self._routes_from: dict[tuple, tuple[str, ...]] = {}  # other aircraft's taxi routes from where they were
         self._star_legs: dict[str, tuple] = {}  # the destination's arrivals (the sim's navdata) by name
+        self._arrivals_at: dict[str, tuple] = {}  # every arrival at an airport (ArrivalProcedure), from the sim
         self._radar_seen: dict[str, Facility] = {}
         self._expected_runway: str | None = None  # the runway the IFR clearance said to expect
         self._real_wait: dict[str, float] = {}  # when an airport's ATIS was first wanted, waiting for the real one
@@ -717,6 +764,7 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
         self._chatter: chatter.Chatter | None = None
         self._chatter_due: float | None = None  # when somebody else may next be heard on the frequency
         self._chatter_station: str | None = None
+        self._chatter2: tuple[str, float] | None = None  # COM2 monitored: its station and when it's next heard
         self._routes_cache: dict[str, list[tuple[str, ...]]] = {}
         self._range_told: dict[str, float] = {}  # station -> when the pilot was last told it's out of range
         self._emergency_told: dict[str, Any] = {}  # what ATC's been told of the emergency: souls, fuel, what's wrong
@@ -912,6 +960,8 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
             code = area.id
         elif own is not None and own.on_ground:
             code = st.flight.destination if self._arriving else st.flight.origin
+        elif (near := self.tracker.context.destination_distance_nm) is not None and near <= REGION_ARRIVAL_NM:
+            code = st.flight.destination  # (Lisbon's descent said the American way: no FIR in the data there, and so Miami's)
         code = code or st.flight.origin or st.flight.destination
         found = regions.region_for(code)
         if self.cfg.transition_ft:
@@ -926,6 +976,8 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
             self._rebuild_facilities()
         elif isinstance(event, TerrainGrid):
             self.terrain.add(event)
+        elif isinstance(event, CabinIncident):
+            out += self._cabin_incident(event)
         elif isinstance(event, OpsSnapshot) and event.kind == "hazards":
             self.hazards = hazards_from(event)
             self._ops_changed = True
@@ -935,11 +987,15 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
                                                 for n in event.notices)
         elif isinstance(event, DeparturesData):
             self._departures[event.airport.upper()] = event.departures
+        elif isinstance(event, PilotReports):
+            self._on_pilot_reports(event)
         elif isinstance(event, ApproachesData):
             self._approach_routes[event.airport.upper()] = event.approaches
         elif isinstance(event, ArrivalData):
             if event.airport.upper() == (self.state.flight.destination or "").upper():
                 self._star_legs[event.name.upper()] = event.legs  # its published speeds: approach's work to them
+            if event.others:
+                self._arrivals_at[event.airport.upper()] = event.others
         elif isinstance(event, AtisReport):
             if self.cfg.atis_source in ("real", "hybrid") and (parsed := real_atis.parse(
                     event.text, event.kind, source=event.source, zulu=event.zulu)) is not None:
@@ -1194,14 +1250,23 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
                 if inputs is None:
                     continue
                 weather, real, source = inputs
+                # The real ATIS out of date (ATIS.guru still had Zurich's from the afternoon before): LocalTC's own from
+                # the METAR, on the runways the airport was working, where the wind still allows them. It landed and
+                # departed 14, and that "seemed simulator made".
+                layout = self.real_layout(icao, kind) if real is None and self.cfg.atis_source in ("real", "hybrid") else None
                 info = self.atis.update(icao, geo, weather, own.zulu_s, self._airport_name(icao), own.t, kind=kind,
-                                        real=real, source=source)
+                                        real=real, source=source, layout=layout)
                 atis_reach = self._reach(Facility("atis", "ATIS", 0.0, icao), own)
                 tuned_here = icao == self._atis_tuned and (kind == "both" or channel_khz(mhz) == channel_khz(own.tx_mhz))
                 if key in self.atis.current:
                     # An AWOS or ASOS and no ATIS: an automated observation (the field's real METAR, as an ATIS has),
                     # read as one. A real ATIS for it (ATIS.guru's) is read as the ATIS it is.
                     self.atis.current[key].automated = automated_only(geo) and real is None
+                if tuned_here and atis_reach is not None and not atis_reach.in_range \
+                        and t_told(self._range_told, key, own.t):
+                    # Tuned and nothing to hear (San Juan's at FL390, 150 miles out: "no ATIS?"): why, once a minute.
+                    out.append(self._alert(own.t, "out_of_range", f"{self._airport_name(icao)} ATIS is "
+                                           f"{atis_reach.distance_nm:.0f} nm away; it reaches about {atis_reach.range_nm:.0f} nm"))
                 if tuned_here and (info is not None or force) and (atis_reach is None or atis_reach.in_range):
                     current = self.atis.current[key]
                     out.append(AtisBroadcast(t=own.t, airport=icao, station=current.name, frequency_mhz=mhz or own.tx_mhz,
@@ -1358,7 +1423,16 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
             # ATIS.guru's (each country words its observation differently), or one with no observation in it: its
             # letter, runways and approaches, the real METAR's weather
             label = f"{'VATSIM' if real.source == 'vatsim' else 'real'} ATIS"
-            return self.weather.surface(icao, airports, report_first=True), real, (label, None, real.zulu)
+            weather = self.weather.surface(icao, airports, report_first=True)
+            if weather is not None and real.wind is not None:
+                # The ATIS's own wind (its touchdown zone's, magnetic) and how it varies, over the METAR's
+                variable = real.variable if real.variable not in (None, (0, 360)) else (None, None)
+                weather = replace(weather, wind=real.wind, wind_dir_true=(real.wind.direction_mag + geo.airport.magvar) % 360,
+                                  variable_from=variable[0], variable_to=variable[1])
+            if weather is not None and real.cavok and not weather.sky:
+                weather = replace(weather, sky=(), clear_below_ft=max(weather.clear_below_ft or 0, 5000),
+                                  visibility_sm=max(weather.visibility_sm or 0.0, 10.0))
+            return weather, real, (label, None, real.zulu)
         if real is not None and real.weather is not None:
             weather = with_magvar(real.weather, geo.airport.magvar)
             weather = replace(weather, t=own.t, elevation_ft=geo.airport.elev_ft,
@@ -1403,6 +1477,8 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
             return  # the plan's on its way
         if nearest is not None:
             st.flight.origin = nearest.icao
+            if self._vfr and not st.flight.destination:
+                st.flight.destination = nearest.icao  # a local VFR flight: back where it started
             self._rebuild_facilities()
             return
         # The nearest has no runways (a heliport, a Coast Guard station): the next ones around, the sim sends only that one.
@@ -1411,6 +1487,19 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
                     and _distance_nm(own.lat, own.lon, near.lat, near.lon) <= ORIGIN_NEAR_NM:
                 self._requested.add(near.icao)
                 self.airport_requests.append(near.icao)
+
+    def real_layout(self, icao: str, kind: str) -> real_atis.RealAtis | None:
+        """The airport's last real ATIS however old: the way it works its runways (Zurich lands 14 and departs 28),
+        for LocalTC's own ATIS when the real one is out of date. Its letter and weather are not used."""
+        def latest(which: str) -> real_atis.RealAtis | None:
+            return self._real_atis.get((icao, which))
+
+        if kind == "both" and (one := latest("both")) is not None:
+            return one
+        arriving = icao == self.state.flight.destination and icao != self.state.flight.origin
+        mine = kind if kind != "both" else "arrival" if arriving else "departure"
+        first, other = latest(mine), latest("departure" if mine == "arrival" else "arrival")
+        return real_atis.combined(first, other) if first is not None and other is not None else first or other
 
     def _real_for(self, icao: str, kind: str, own: OwnshipState) -> real_atis.RealAtis | None:
         """The airport's real ATIS for a broadcast of ``kind``: its arrival and departure ones read as one, the letter
@@ -1535,6 +1624,10 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
             self._tuned_since = own.t
             if previous[1] is not None and tuned is not None and tuned.station != previous[1].station:
                 self._left_at[previous[1].station] = own.t  # off to another controller: back, it's a new check-in
+                # An answer still to come from the one left isn't heard: Zurich Ground's "contact Tower" came three
+                # seconds after the pilot had already switched to the tower.
+                self._scheduled = [s for s in self._scheduled
+                                   if not (s.reply and s.facility.station == previous[1].station)]
             expected = st.comms.expected
             if st.pending is not None and expected is not None and tuned == expected and st.pending.controller != tuned.controller:
                 # Switched to the new frequency without reading it back: that's the answer. It counts as
@@ -1987,6 +2080,8 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
         """Automatic ATC calls and alerts that don't wait for the pilot."""
         st, ctx, t = self.state, self._dest_context(), own.t  # (a final at another airfield is not the approach)
         out: list[BusEvent] = []
+        if self.route and self.route.fixes:
+            self._track_route(own)  # the fixes flown by, every second (``_next_fix`` never offers one before them)
         if own.squawk == "7700" and "squawk_7700" not in st.flags:
             st.flags.add("squawk_7700")
             out.append(self._alert(t, "emergency", "squawking 7700"))
@@ -2000,11 +2095,15 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
         if self._crossing is not None and not on_runway_now and self._was_crossing:
             self._crossing = None  # over it and off the other side: the clearance to cross is used up
         self._was_crossing = on_runway_now and self._crossing is not None
+        if self._ran_onto is not None and not on_runway_now:
+            self._crossed.add(self._ran_onto)  # across it, cleared or not: nothing still to wait for (tower never came)
+            self._ran_onto = None
         if entered_runway and own.on_ground and st.phase in (P.TAXI_OUT, P.RUNWAY_HOLD):
             crossing = ctx.runway is not None and ctx.runway.name == self._crossing
             if not ({"takeoff", "line_up"} & st.clearances.keys()) and not crossing:
                 where = f"runway {ctx.runway.name}" if ctx.runway else "a runway"
                 out.append(self._alert(t, "runway_incursion", f"entered {where} without clearance"))
+                self._ran_onto = ctx.runway.name if ctx.runway is not None else None
 
         if (entered := self._vfr_class_b_watch(own)) is not None:
             out.append(entered)
@@ -2020,6 +2119,8 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
             return out
         if self.cfg.unscripted and st.phase is not None and self._can_call(t, own) and self._watch_conditions(own):
             return out  # a condition on a clearance met, run out or not kept to: what follows from it
+        if self.cfg.unscripted and st.phase is not None and own.on_ground and self._can_call(t, own) and self._push_watch(own):
+            return out  # a push held at the gate, released
         if self.cfg.unscripted and st.phase is not None:
             out += self._watch(own)
         if st.phase is None or not self._can_call(t, own):
@@ -2034,9 +2135,12 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
             if self._runway_conflict(own) or self._emergency_handling(own) or self._diversion_vectors(own) \
                     or (ifr and self._low_altitude(own)) \
                     or self._sequence_on_final(own) \
+                    or (ifr and self.cfg.unscripted and self._seq_watch(own, tuned_facility)) \
                     or (ifr and self._holds(own, tuned_facility)) \
                     or (ifr and self._watch_amendments(own, tuned_facility)) \
+                    or (ifr and self.cfg.unscripted and self._flow_watch(own, tuned_facility)) \
                     or (ifr and self._hazards_ahead(own, tuned_facility) if tuned_facility is not None else False) \
+                    or (ifr and self._off_course(own, tuned_facility) if tuned_facility is not None else False) \
                     or (ifr and self._radar_vectors(own)) or self._traffic_advisory(own) \
                     or (ifr and self._altitude_check(own)) or (ifr and self._heading_check(own)):
                 return out
@@ -2141,6 +2245,11 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
                 and (phase is P.CRUISE or own.alt_indicated_ft >= 18000) and self._descent_due(own) \
                 and (plan := self._arrival_plan(own)) is not None:
             self._clear_descent(t, own, st.comms.tuned, plan)
+        elif phase in (P.CRUISE, P.ARRIVAL) and tuned in ("center", "approach") and "descend" in st.flags \
+                and st.pending is None and not self._going_around and self.diversion.target is None and self._descent_ignored(own):
+            self._descent_told, self._descent_told_t = self._descent_told + 1, t
+            self._schedule(t, "common.descend_now" if self._descent_told == 1 else "common.descend_intentions", {}, st.comms.tuned,
+                           delay=False, expects_readback=False)
         elif phase in (P.ARRIVAL, P.APPROACH) and tuned in ("center", "departure") and self._holding():
             pass  # in the hold: the descent and approach come after it
         elif phase in (P.ARRIVAL, P.APPROACH) and tuned in ("center", "departure"):
@@ -2158,6 +2267,10 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
                 and ctx.final is not None and ctx.final.distance_nm <= TOWER_AT_NM + 4 and (tower := self.facility("tower")) is not None \
                 and once("approach_tower"):
             self._handoff(t, "approach.handoff_tower", st.comms.tuned, tower)  # established: over to tower
+        elif phase in (P.ARRIVAL, P.APPROACH, P.LANDING) and tuned == "approach" and "approach" in st.clearances \
+                and self._untowered_arrival() and ctx.final is not None and ctx.final.distance_nm <= TOWER_AT_NM + 4 \
+                and st.pending is None and once("approach_advisory"):
+            self._advisory(t, own, st.comms.tuned)  # no tower to send it to: the field's radio, or the advisory frequency
         elif phase in (P.ARRIVAL, P.APPROACH, P.LANDING) and tuned == "approach" and "approach" not in st.clearances:
             # The approach is cleared well before the aircraft is established, not as it crosses the
             # threshold of the approach phase: a pilot flying an ILS wants the clearance before
@@ -2180,6 +2293,8 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
             occupying = self._traffic_on_runway(own, runway) if runway is not None else None
             if on_final and (runway is None or (occupying is None and self._traffic_ahead(own, runway) is None)):
                 self._clear_to_land(t, own, st.comms.tuned, delay=False)
+            elif on_final and occupying is not None and self.cfg.unscripted and self._departing_ahead(own, runway, occupying):
+                self._clear_after_departure(t, own, st.comms.tuned, runway, occupying)
             elif on_final and occupying is not None and self.conditions.active("vacate") is None \
                     and t - self._continued_t > CONTINUE_EVERY_S:
                 self._continued_t = t
@@ -2235,6 +2350,24 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
                             "city": city}, st.comms.tuned, handoff_to=ground)
         else:
             self._handoff(t, "tower.exit_contact_ground", st.comms.tuned, ground)
+
+    def _cabin_incident(self, ev: CabinIncident) -> list[BusEvent]:
+        """The captain's decision on a problem in the cabin, where ATC comes into it: the help asked for, a diversion, an
+        emergency declared."""
+        st, own, facility = self.state, self.state.aircraft, self.state.comms.tuned
+        if ev.stage != "decided" or ev.decision == "continue" or own is None or facility is None \
+                or facility.controller in ("atis", "ramp"):
+            return []
+        what, help_is = INCIDENTS.get(ev.kind, ("a problem in the cabin", "assistance"))
+        if ev.decision == "assist":
+            where = "at the gate" if own.on_ground else "on arrival"
+            words = f"{help_is} will meet you {where}, advise if you need priority"
+            self._schedule(ev.t, "common.cabin_assist", {"message": Phrase(words, words)}, facility, delay=False, expects_readback=False)
+        elif ev.decision == "divert" and not own.on_ground:
+            self._divert(Interpretation(kind="request", intent="request_diversion", text=f"request diversion, {what}"), facility, ev.t, own)
+        elif ev.decision == "escalate":
+            return self._emergency(Interpretation(kind="request", intent="emergency", text=f"pan pan, {what}"), facility, ev.t)
+        return []
 
     def _cross(self, t: float, own: OwnshipState, crossing: str, side: str) -> None:
         """Across a runway on the taxi: straight away, or with landing traffic close in, behind it (ICAO) or held short
@@ -2310,8 +2443,11 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
             return None
         if heading_true is None:
             geo = self.geometry(self.state.flight.destination)
-            return self.terrain.mva_ft(own.lat, own.lon, geo.distance_nm(own.lat, own.lon) if geo is not None else None)
-        return self.terrain.corridor_ft(own.lat, own.lon, heading_true, miles)
+            floor = self.terrain.mva_ft(own.lat, own.lon, geo.distance_nm(own.lat, own.lon) if geo is not None else None)
+        else:
+            floor = self.terrain.corridor_ft(own.lat, own.lon, heading_true, miles)
+        # In whole five hundreds, up: "descend and maintain 3,100" isn't an altitude a controller gives
+        return int(math.ceil(floor / 500.0) * 500) if floor is not None else None
 
     # --- LocalTC's traffic (localtc.traffic) ----------------------------------------------------------------------
 
@@ -2409,8 +2545,11 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
     def _traffic_request(self, kind: str, facility: Facility, callsign: Callsign, shown: str, slots: dict[str, Any],
                          rng: random.Random) -> tuple[str, str] | None:
         """What another flight says first, when it's its call to make (most of the time), or None: the controller's."""
-        if kind not in ("clearance", "pushback", "taxi_out", "taxi_in", "takeoff", "land") or rng.random() >= PILOT_FIRST:
+        if kind not in ("clearance", "pushback", "taxi_out", "taxi_in", "takeoff", "land"):
             return None
+        if kind in ("takeoff", "land") and rng.random() >= PILOT_FIRST:
+            return None  # tower calls them now and then; a clearance, a push and a taxi are always asked for first
+            # ("why didn't Ibiza Air ask for clearance before ground randomly assigned them?")
         said = speech.callsign(callsign)
         runway = str(slots.get("runway") or "")
         words = {
@@ -2478,6 +2617,48 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
         return None
 
     def _ambient(self, own: OwnshipState) -> list[BusEvent]:
+        """The rest of the frequency (atc_core/chatter.py), on COM1 and on COM2 when it's being listened to."""
+        out = self._ambient_com1(own)
+        return out or self._ambient_com2(own)
+
+    def _ambient_com2(self, own: OwnshipState) -> list[BusEvent]:
+        """COM2 monitored (its receive switch on), on another controller's frequency: that one's traffic now and then too,
+        quieter than COM1's (each gap half again as long). Never clearance's or the ramp's."""
+        st, t = self.state, own.t
+        if not self.cfg.chatter or not own.com2_rx or self._chatter is None or st.pending is not None:
+            return []
+        com1 = st.comms.tuned
+        facility = next((f for f in self.facilities if f.matches(own.com2_mhz)), None)
+        if facility is None or facility.controller not in chatter.GAP_S or (com1 is not None and facility.station == com1.station):
+            self._chatter2 = None
+            return []
+        if self._chatter2 is None or self._chatter2[0] != facility.station:
+            self._chatter2 = (facility.station, t + self._chatter.gap(facility.controller))
+            return []
+        last_pilot = st.comms.last_pilot_t if st.comms.last_pilot_t is not None else -math.inf
+        last_atc = st.comms.last_atc_t if st.comms.last_atc_t is not None else -math.inf
+        if t < self._chatter2[1] or t - last_pilot < CHATTER_QUIET_S or t - last_atc < CHATTER_QUIET_S \
+                or self._scheduled or self._later or self._transmitting(t) or t < self._radio_busy_until:
+            return []
+        if (heard := self._reach(facility, own)) is not None and not heard.in_range:
+            return []
+        self._chatter2 = (facility.station, t + self._chatter.gap(facility.controller) * 1.5)
+        try:
+            lines = self._chatter.exchange(self._scene(facility, own))
+        except Exception:
+            logging.getLogger(__name__).exception("Chatter failed on %s", facility.station)
+            return []
+        out: list[BusEvent] = []
+        at = t
+        for line in lines:
+            out.append(RadioChatter(t=round(at, 1), station=facility.station, frequency_mhz=facility.mhz, speaker=line.speaker,
+                                    callsign=line.callsign, text=line.text, spoken=line.spoken, controller=facility.controller,
+                                    locale=self._voice_locale(facility, line.speaker, line.ident), ident=line.ident, radio=2))
+            at += self._speech_s(line.spoken) + CHATTER_TURN_S
+        self._radio_busy_until = max(self._radio_busy_until, at)
+        return self._paced(out)
+
+    def _ambient_com1(self, own: OwnshipState) -> list[BusEvent]:
         """The rest of the frequency (atc_core/chatter.py): now and then, when it's quiet, the controller and
         some other flight. Never while the pilot owes a readback, has just spoken or is about to be answered."""
         st, t = self.state, own.t
@@ -2592,8 +2773,8 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
                     if lined_up and lined_up not in by_runway and (end_for := geo.end(lined_up)) is not None:
                         by_runway[lined_up] = self._chatter_routes(geo, end_for)
                 route = self._route_from(geo, target, lined_up) if doing in ("at_gate", "taxiing_out") else ()
-                other = chatter.Other(oid, callsign, doing, int(round(target.alt_ft / 1000) * 1000), lined_up,
-                                      route=route)
+                other = chatter.Other(oid, callsign, doing, int(round(self._as_flown(target.alt_ft, own) / 1000) * 1000),
+                                      lined_up, route=route)
                 if plan is not None and doing in ("descending", "level"):
                     other = self._other_arrival(other, target, geo, plan, own)
                 others.append(other)
@@ -2675,6 +2856,16 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
             return Callsign.named(ident)  # a light aircraft flying about under its registration
         return None
 
+    @staticmethod
+    def _as_flown(true_ft: float, own: OwnshipState) -> float:
+        """Another aircraft's true altitude as its altimeter reads it: up in the flight levels, the pressure altitude
+        (corrected by what the pilot's own reads against its true altitude). A Qatari at FL390, 41,000 ft true on a warm
+        day, was told "climb to FL390"."""
+        if not own.altimeter_setting_inhg or own.alt_indicated_ft < TRANSITION_FT_MIN:
+            return true_ft
+        pressure_own = own.alt_indicated_ft - (own.altimeter_setting_inhg - 29.92) * 1000.0
+        return true_ft - (own.alt_msl_ft - pressure_own)
+
     def _doing(self, target: TrafficTarget, geo: AirportGeometry | None, facility: Facility,
                own: OwnshipState | None = None) -> str | None:
         """What another aircraft is doing that ``facility``'s controller would be talking to it about, or None.
@@ -2707,6 +2898,16 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
         dt = self._traffic_t - self._traffic_before_t
         fpm = (target.alt_ft - before.alt_ft) / dt * 60 if before is not None and dt > 0 else 0.0
         trend = "climbing" if fpm > 300 else "descending" if fpm < -300 else "level"
+        if aircraft_size.wake_category(clean_sim_name(target.atc_model)) == "L" and target.gs_kt >= 50:
+            # A light aircraft: in the circuit at a mixed airport (a trainer doing touch and goes beside the airliners),
+            # or on a cross-country with radar's flight following. Never one the pilot's own flight is landing behind.
+            agl = target.alt_ft - (geo.airport.elev_ft if geo is not None else 0.0)
+            if controller == "tower" and geo is not None and geo.distance_nm(target.lat, target.lon) <= 3.5 \
+                    and 300 <= agl <= 2500 and mine is None:
+                return "pattern"
+            if controller in ("departure", "approach", "center") and target.alt_ft < 12500 and agl >= 1000 \
+                    and (geo is None or geo.distance_nm(target.lat, target.lon) > 5.0):
+                return "vfr"
         if controller == "tower":
             near = geo is not None and geo.distance_nm(target.lat, target.lon) <= 8.0 \
                 and target.alt_ft - geo.airport.elev_ft < 3000
@@ -2787,7 +2988,7 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
             _, _, new = self._last_handoff
             tuned = st.comms.tuned
             if tuned == new and last_pilot < self._tuned_since and t - self._tuned_since >= MISSED_CHECKIN_S \
-                    and new.controller in ("departure", "approach"):
+                    and new.controller in ("departure", "center", "approach"):
                 self._last_handoff = None  # on frequency but quiet: the new controller calls first
                 st.comms.contacted.add(new.controller)
                 self._checkin(t, new, own)
@@ -2804,6 +3005,9 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
             return False
         if st.comms.expected is not None and st.comms.expected != tuned:
             return False  # handed off to the next controller: this one has nothing more to say (Socal after "contact tower")
+        last = getattr(self, "_last_traffic_at", None)
+        if last is not None and t - last[0] < TRAFFIC_GAP_S:
+            return False
         best: tuple[float, TrafficTarget] | None = None
         fields = [g for g in (self.tracker.context.airport, self.geometry(st.flight.origin), self.geometry(st.flight.destination))
                   if g is not None]
@@ -2825,6 +3029,9 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
                 continue  # lined up to land: in the landing order, not in anyone's way up here
             if t - self._traffic_called.get(oid, -math.inf) < TRAFFIC_REPEAT_S:
                 continue
+            if last is not None and t - last[0] < TRAFFIC_REPEAT_S and last[3] == target.atc_model \
+                    and _distance_nm(target.lat, target.lon, last[1], last[2]) < TRAFFIC_SAME_NM + (t - last[0]) * target.gs_kt / 3600:
+                continue
             if best is None or nm < best[0]:
                 best = (nm, target)
         if best is None:
@@ -2836,6 +3043,7 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
         if 5 <= clock <= 7 and (relative < 30 or relative > 330):
             return False  # behind and going the same way: it can't be seen, and it isn't closing on anything
         self._traffic_called[target.object_id] = t
+        self._last_traffic_at = (t, target.lat, target.lon, target.atc_model)
         direction = ("same direction" if relative < 30 or relative > 330 else "opposite direction" if 150 <= relative <= 210
                      else "crossing left to right" if relative < 180 else "crossing right to left")
         miles = max(1, round(nm))
@@ -2924,6 +3132,9 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
                 self._gave_way_t = t
                 self._gave_way_to.add(oid)
                 kind = self._aircraft(target) or Phrase("traffic", "traffic")
+                from localtc.atc_core.conditions import Condition
+
+                self.conditions.add(Condition("taxi_follow", t, "ground.follow", oid, kind.display, until_t=t + 900.0))
                 self._schedule(t, "ground.follow", {"message": kind}, tuned, delay=False, expects_readback=False)
                 return True
             self._gave_way_t = t
@@ -3065,6 +3276,8 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
             return  # lined up already: it goes the moment the runway is free, not back to the hold line
         if self._takeoff_wait == runway and self._takeoff_hold == reason and not answering:
             return  # already told; still waiting for it to clear
+        if reason == "occupied" and self._conditional_behind_departure(t, facility, runway, target, answering=answering):
+            return  # ICAO: "behind the departing ..., line up and wait behind"
         if reason == "arrival" and self._conditional_line_up(t, facility, runway, target, miles, answering=answering):
             return  # ICAO: "behind the landing ..., line up and wait behind"
         self._takeoff_wait, self._takeoff_hold = runway, reason
@@ -3281,6 +3494,42 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
                            on_issue=lambda: self._assign(altitude_ft=altitude))
         return True
 
+    def _untowered_arrival(self) -> bool:
+        """Arriving at a field with no tower: its pilots announce themselves (a CTAF, or the field's radio station)."""
+        dest = self.state.flight.destination
+        return bool(dest) and self._arriving and self.geometry(dest) is not None and not self._staffed(dest, "tower")
+
+    @staticmethod
+    def _asks_to_land(interp: Interpretation) -> bool:
+        words = (interp.text or "").lower()
+        return interp.intent in ("report_final", "request_landing") or (
+            "land" in words and interp.intent in ("request_runway", "request_ifr_clearance", "other", "checkin"))
+
+    def _field_radio(self) -> Facility | None:
+        """The destination's own radio (Tarama Radio 118.6: a flight service station, an AFIS), from the sim's data."""
+        dest = self.state.flight.destination
+        geo = self.geometry(dest)
+        if geo is None:
+            return None
+        freqs = [f for f in geo.airport.frequencies if f.kind in ("fss", "afis", "unicom", "ctaf")]
+        if not freqs:
+            return None
+        f = freqs[0]
+        name = self._airport_name(dest)
+        return Facility("radio", f"{name} Radio", f.mhz, dest)
+
+    def _advisory(self, t: float, own: OwnshipState, facility: Facility) -> None:
+        """Established for a field with no tower: the wind, and the pilot sent to the field's radio where it has one,
+        else the advisory frequency, to land on their own say."""
+        wind = self._surface_wind(own, self.state.flight.destination)
+        radio = self._field_radio()
+        self.state.flags.add("advisory")
+        if radio is not None:
+            self._schedule(t, "approach.handoff_radio", {"wind": wind, "station": radio.station, "frequency": radio.mhz},
+                           facility, delay=True)
+        else:
+            self._schedule(t, "approach.advisory", {"wind": wind}, facility, delay=True, expects_readback=False)
+
     def _not_with_tower(self, own: OwnshipState) -> bool:
         """Short final, still on approach's frequency, no landing clearance: told to contact tower and didn't, or
         never told. Approach sends the flight around rather than let it land unannounced (a flight that flew its own
@@ -3289,6 +3538,8 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
         tuned = st.comms.tuned
         if tuned is None or not self._works_approach(own) or own.on_ground or self._going_around or "emergency" in st.flags:
             return False
+        if self._untowered_arrival():
+            return False  # no tower there: nobody clears anyone to land (Tarama: "go around, you're not cleared to land", twice)
         if P(st.phase) is not P.LANDING or "landing" in st.clearances or ctx.final is None \
                 or ctx.final.distance_nm > GO_AROUND_NM or "not_with_tower" in st.flags:
             return False
@@ -3404,6 +3655,17 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
         self._altitude_checked_t = t
         checks = self._altitude_checks.get(assigned, 0)
         self._altitude_checks[assigned] = checks + 1
+        if P(st.phase) is P.ARRIVAL and own.alt_indicated_ft < assigned and self._works_approach(own) \
+                and (plan := self._arrival_plan(own)) is not None:
+            # Under the altitude approach gave, on the way in: the descent it would have given (where the ground
+            # allows), not "check altitude" to climb back. San Juan held a flight at 11,000 thirty miles out and told it
+            # twice to go back up.
+            floor = max(plan["approach_alt"], self._terrain_floor(own, own.hdg_true) or 0)
+            lower = max(floor, int(math.ceil(own.alt_indicated_ft / 1000.0) * 1000))
+            if lower <= assigned - 1000:
+                self._schedule(t, "common.descend", {"altitude": lower}, st.comms.tuned, delay=False,
+                               on_issue=lambda: self._assign(altitude_ft=lower))
+                return True
         if checks < ALTITUDE_CHECKS:
             self._schedule(t, "common.check_altitude", {"altitude": assigned}, st.comms.tuned, delay=False)
             return True
@@ -4231,6 +4493,12 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
             # that" and the hold stayed; "we're back on track, can we continue the course" got the hold said again.
             self._leave_hold(own, facility, answering=True)
             return []
+        if own is not None and not own.on_ground and facility.controller in ("approach", "center", "departure") \
+                and self._untowered_arrival() and self._asks_to_land(interp)                 and ("approach" in st.clearances or "advisory" in st.flags):
+            # "Request clearance for landing" at a field with no tower: there's no landing clearance to give. The wind,
+            # and over to the field's frequency. (Tarama got "unable", then "unable, continue as filed".)
+            self._advisory(t, own, facility)
+            return []
         if intent in ("other", "report_problem"):  # (a problem it couldn't place: "our managed speed isn't working" went unanswered)
             return self._decline(interp, facility, t)
         if self._vfr and self._vfr_request(interp, facility, t, own):
@@ -4316,6 +4584,7 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
             last = st.last_issued
             if last is not None and last.facility.controller == facility.controller:
                 self._schedule(t, last.instruction_id, last.slots, facility)
+                self._scheduled[-1].repeat = True  # the same clearance in other words, not a recording played again
             else:
                 self._schedule(t, "common.say_again", {}, facility)
         # acknowledge: nothing to say
@@ -4333,6 +4602,11 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
         if geo is not None and asked:
             end = geo.end(asked)
             runway = end.runway.name if end is not None else None
+            asked = asked if end is not None else ""  # (a runway no airport has: which one is plain from where they are)
+        if runway is None and own is not None and (near := self._crossing_near(own)) is not None:
+            runway = near[0]
+        if runway is None and (todo := [r for r in self._crossings if r not in self._crossed]):
+            runway = todo[0]  # the next one on the way
         if runway is None and ctx.hold_short is not None:
             runway = ctx.hold_short.runway.name
         departure = st.assignments.departure_runway
@@ -4456,6 +4730,15 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
             return
         elif known:
             fix = found  # "knob" is NOBKE: the fix of the route it sounds like
+        if own is not None and str(fix) != name and not self.validate(own, fix=str(fix)).ok:
+            self._schedule(t, "common.unable", {}, facility)  # (no fix of this flight's, through a hazard, or into the ground)
+            return
+        if own is not None and self.cfg.unscripted and (minutes := self._direct_held(own, str(fix))) is not None:
+            # Arrivals stacked ahead: the direct would cut in front of them. Said why, and given once it fits.
+            self._seq["direct_held"] = (str(fix), t)
+            self._seq["direct_t"] = t
+            self._schedule(t, "common.unable_direct_sequence", {"minutes": minutes}, facility, expects_readback=False)
+            return
         self._end_hold(t, f"direct {fix}")
         for a in self.amendments:
             if a.state == "active" and a.kind == "deviation":
@@ -4547,7 +4830,9 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
         if tuned is None or not self._works_approach(own) or self._holding():
             return False
         if "approach" in st.clearances:  # cleared: still slowing down until tower has it
-            sent_on = st.comms.expected is not None and st.comms.expected.station != tuned.station
+            handed = self._last_handoff is not None and self._last_handoff[2].controller == "tower"
+            sent_on = (st.comms.expected is not None and st.comms.expected.station != tuned.station) or handed
+            # (handed to tower and read back, still on approach's frequency: "reduce speed to 180" came after it)
             # (Handed to tower already: not "reduce speed to 160" twelve seconds after "contact Denver Tower".)
             return st.pending is None and not sent_on and self._speed_control(own, t, tuned)
         if (st.comms.last_pilot_t or -math.inf) < self._tuned_since:
@@ -4600,6 +4885,8 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
         leg = self._vector(own, runway)
         if leg is None:
             return False
+        if self._extend_said(own, tuned, runway):
+            return True
         # Room between instructions, except for the turn onto the final: that one can't wait.
         cutting_in = leg.leg == "intercept" and self._vector_leg != "intercept"
         if t - self._vector_t < (INTERCEPT_GAP_S if cutting_in else VECTOR_GAP_S):
@@ -4618,20 +4905,34 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
             assigned is not None and abs(((heading - assigned + 540) % 360) - 180) < REVECTOR_DEG)  # still turning onto it
         # Down with the miles left to fly, never a climb. On its own (no turn to go with it) only a real step.
         level = st.assignments.altitude_ft or int(round(own.alt_indicated_ft, -2))
+        via_ended = False
         if self._via_floor is not None and st.assignments.altitude_ft == self._via_floor:
-            # Vectored off the arrival it was descending via: that clearance is over, the altitude it's at is where it
-            # is (Bozeman: "descend via" to 7,000 made 12,000 look cleared down already, and no descent ever came).
-            level = int(round(own.alt_indicated_ft, -2))
+            # Vectored off the arrival it was descending via: that clearance is over, and the vector says the altitude
+            # to keep to (Bozeman: "descend via" to 7,000 made 12,000 look cleared down already, and no descent ever
+            # came), a round one at or below where it is.
+            level = int(own.alt_indicated_ft // 1000 * 1000)
             if new_heading:
                 self._via_floor = None
-                self._assign(altitude_ft=level)  # what it's at, until the next step down
+                via_ended = True
         step = self._step_altitude(own, plan) if plan else None
         gap = 1000 if new_heading else 2000
-        if step is not None and (floor := self._terrain_floor(own, leg.heading_true)) is not None:
+        floor = self._terrain_floor(own, leg.heading_true)
+        if new_heading and floor is not None and level < floor:
+            # The turn asked for goes into rising ground at this altitude: the nearest heading that doesn't, or none at all.
+            safe = self._safe_heading(own, leg.heading_true, level)
+            if safe is None:
+                return False
+            magvar = ((own.hdg_true - own.hdg_mag + 180) % 360) - 180
+            heading = int(round((safe - magvar) % 360)) % 360 or 360
+            turn = "right" if ((heading - own.hdg_mag) % 360) < 180 else "left"
+            floor = self._terrain_floor(own, safe)
+        if step is not None and floor is not None:
             step = max(step, floor)  # never below the minimum vectoring altitude along the new heading
         descend = step if step is not None and step <= level - gap and own.alt_indicated_ft > step + 300 else None
         if descend is not None and not new_heading and t - self._descend_t < DESCEND_GAP_S:
             descend = None
+        if via_ended and descend is None:
+            descend = level  # said with the heading, never assigned unsaid
         if not new_heading and descend is None:
             return False
         self._vector_t = t
@@ -4639,8 +4940,8 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
             self._descend_t = t
         if new_heading:
             self._vector_leg = leg.leg
-            if self._vector_side is None and leg.leg in ("join", "downwind", "base"):
-                self._vector_side = leg.side
+            if leg.leg in ("join", "downwind", "base"):
+                self._vector_side = leg.side  # (it moves over with a pattern that crossed the final: ``vectors.vector``)
         if new_heading and leg.leg == "intercept" and plan is not None:
             # "Turn left heading 190, maintain 4,000 until established on the localizer, cleared ILS 16L approach."
             altitude = min(level, self._intercept_altitude(own, plan))
@@ -4683,6 +4984,10 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
         geo = self.geometry(self.state.flight.destination)
         end = geo.end(runway) if geo is not None else None
         fixes = self.route.procedure(self.cfg.star, "DSC")
+        if fixes and (entry := self._star_entry(fixes[0])) is not None:
+            # From where it starts ("BEANO BEANO3": BEANO), not its second fix: flying BEANO to MYLET, San Juan saw the
+            # flight 36 miles off the arrival and vectored it off with the STAR's fixes still ahead.
+            fixes = (entry, *fixes)
         if geo is None or end is None or len(fixes) < 2:
             return None
         join = procedures.star_join(geo, end, fixes)
@@ -4691,9 +4996,32 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
         # transition on to HOOPE): the approach clearance comes as for a STAR that runs onto the final, no headings.
         onward = join is None and self._transition_from(target.ident, runway) is not None
         where = procedures.progress(geo, fixes[:fixes.index(target) + 1], own.lat, own.lon, target)
+        if where is not None and where.off_nm > procedures.ON_PATH_NM and self._heading_for(own, fixes[0]):
+            # Still on the way in to where it starts, pointed at it: on the arrival as filed, its miles from here.
+            return join is not None or onward, where.left_nm + where.off_nm
         if where is None or where.off_nm > procedures.ON_PATH_NM or (join is not None and where.left_nm <= 0):
             return None
         return join is not None or onward, where.left_nm
+
+    @staticmethod
+    def _heading_for(own: OwnshipState, fix) -> bool:
+        """Flying towards ``fix`` (within 30 degrees of it) and no more than 60 miles from it."""
+        if fix is None or haversine_nm(own.lat, own.lon, fix.lat, fix.lon) > 60.0:
+            return False
+        to = bearing_deg(own.lat, own.lon, fix.lat, fix.lon)
+        return abs(((to - own.hdg_true + 540) % 360) - 180) <= 30.0
+
+    def _star_entry(self, first):
+        """The plan's fix just before the STAR's first, where the STAR begins (its name's fix: BEANO for BEANO3), or None."""
+        plan = list(self.route.fixes)
+        i = next((k for k, f in enumerate(plan) if f is first), None)
+        if not i:
+            return None
+        before = plan[i - 1]
+        star = re.sub(r"\d+[A-Z]?$", "", (self.cfg.star or "").upper())  # BEANO3: BEANO, BLM3G: BLM
+        # (a five-letter fix's STAR is named by four of them: VUTEB's is VUTE3E)
+        named = before.ident.upper() == star or (len(star) == 4 and len(before.ident) == 5 and before.ident.upper().startswith(star))
+        return before if star and named else None
 
     def _transition_from(self, fix: str, runway: str) -> tuple | None:
         """The planned approach's transition (its fixes, from the sim's navdata) that starts at ``fix``, or None."""
@@ -4790,6 +5118,8 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
                 and vectors.too_high(leg, own.alt_indicated_ft, geo.airport.elev_ft, slow=own.gs_kt < vectors.SLOW_KT,
                                      margin_ft=margin):
             return vectors.extended(geo, end, own.lat, own.lon)  # (its own side: the one it's on now)
+        if self.cfg.unscripted and self._extend_for_gap(own, runway, leg):
+            return vectors.extended(geo, end, own.lat, own.lon)  # the one ahead too close to turn in behind
         return leg
 
     @staticmethod
@@ -4810,12 +5140,16 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
         return max(plan["approach_alt"], int(under // 500 * 500))
 
     def _step_altitude(self, own: OwnshipState, plan: dict[str, Any]) -> int:
-        """Where approach wants the arrival now: down with the miles still to fly (vectors.step_altitude)."""
+        """Where approach wants the arrival now: down with the miles still to fly (vectors.step_altitude), and never
+        held up by a long way round for the sequence: no higher than the miles to the field call for, plus a thousand
+        (San Juan kept a flight at 11,000 at thirty miles, its vectors stretched behind three others)."""
         leg = self._vector(own, plan["final"])
         geo = self.geometry(self.state.flight.destination)
         if leg is None or geo is None:
             return plan["approach_alt"]
-        return vectors.step_altitude(leg.track_nm, geo.airport.elev_ft, plan["approach_alt"])
+        by_track = vectors.step_altitude(leg.track_nm, geo.airport.elev_ft, plan["approach_alt"])
+        by_distance = vectors.step_altitude(geo.distance_nm(own.lat, own.lon), geo.airport.elev_ft, plan["approach_alt"]) + 1000
+        return min(by_track, by_distance)
 
     def _set_arrival(self, runway: str | None, kind: str | None, own: OwnshipState | None) -> Approach | None:
         """The pilot's choice of arrival runway and approach, if the airport and the weather allow it."""
@@ -4906,8 +5240,20 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
         if facility.controller == "tower" and own is not None and not own.on_ground and runway:
             self._tower_runway(runway, facility, t, own)  # "request runway 01" on final: cleared to land there
             return
+        if self._sidestep_request(own, facility, runway, t):
+            return  # "request side-step to 28L", cleared for the approach to 28R
         if not self._airborne_controller(facility, own) or "approach" in st.clearances:
             self._schedule(t, "common.unable", {}, facility)
+            return
+        named = charted_visuals.requested(st.flight.destination, runway or st.assignments.arrival_runway, interp.text or "")
+        if named is not None and own is not None:
+            # "Request the River Visual": the named one, in the weather for it.
+            if not self._visual_weather():
+                self._schedule(t, "common.unable", {}, facility)
+                return
+            self._approach_kind = named
+            self._assign(arrival_runway=named.landing_runway, approach=named.display)
+            self._schedule(t, "common.expect_approach", {"approach": named}, facility)
             return
         if runway and self._closed(st.flight.destination, runway):
             self._schedule(t, "common.runway_closed", {"runway": runway}, facility)
@@ -5000,6 +5346,7 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
                        on_issue=lambda: self._assign(altitude_ft=altitude))
 
     def _pirep(self, interp: Interpretation, facility: Facility, t: float, own: OwnshipState | None) -> None:
+        self._take_report(interp.text or "", own)  # kept: the next ride question has it (rides.py)
         self._schedule(t, "common.pirep", {}, facility)
 
     def _traffic_reply(self, interp: Interpretation, facility: Facility, t: float, own: OwnshipState | None) -> list[BusEvent] | None:
@@ -5156,6 +5503,14 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
                 return []
         text = interp.text or ""
         exact = False
+        if topic in ("ride", "clearance") and (known := self._answer_message(topic, text)) is not None:
+            # The ride reports, or what the flight's cleared for: the state has the answer, the model may word it.
+            if self.phraser is not None and self.llm_mode in ("mostly_llm", "llm"):
+                return self._phrase(interp, facility, t, "answer", known=known, require=False,
+                                    otherwise=Phrase(known.display, known.spoken))
+            self._schedule(t, "common.ride_report" if topic == "ride" else "common.confirm_clearance", {"message": known},
+                           facility, expects_readback=False)
+            return []
         if (lengths := self._runway_lengths(text, facility)) is not None:
             message, answers_it, exact = lengths, True, True  # "how long is runway 24R?": the airport data has it
         else:
@@ -5313,6 +5668,10 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
         st, own = self.state, self.state.aircraft
         if topic in ("weather", "wind") and (elsewhere := self._weather_elsewhere(text)) is not None:
             return self._report_message(elsewhere, topic)  # not where the aircraft is: never the wind up here
+        if topic == "ride":
+            return self._ride_message(own, text)
+        if topic == "clearance":
+            return self._clearance_message()
         parts: list[tuple[str, dict[str, Any]]] = []
         altimeter = round(own.altimeter_setting_inhg, 2) if own and 25 < own.altimeter_setting_inhg < 33 else None
         if (airport := st.comms.tuned.airport if st.comms.tuned is not None else None) is not None:
@@ -5407,6 +5766,8 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
     def _altitude_request(self, interp: Interpretation, facility: Facility, t: float, own: OwnshipState | None) -> None:
         st = self.state
         wanted = interp.values.get("altitude")
+        if self.cfg.unscripted and self._smoother_request(interp, facility, t, own):
+            return  # "request a smoother ride": the level with the least reported (rides.py)
         if facility.controller not in ("departure", "center", "approach") or own is None or own.on_ground:
             self._schedule(t, "common.unable", {}, facility)
             return
@@ -5421,6 +5782,9 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
             self._schedule(t, "common.unable", {}, facility)
             return
         climbing = wanted > own.alt_indicated_ft
+        if not climbing and (minimum := self._minimum_here(own)) is not None and wanted < minimum:
+            self._schedule(t, "common.unable_terrain", {"altitude": minimum}, facility, expects_readback=False)
+            return
         if not climbing and "descend" not in st.flags and st.phase in (P.DEPARTURE, P.CRUISE) \
                 and own.alt_indicated_ft >= 10000 and self._descent_due(own, lead_min=DESCENT_ASK_MIN) \
                 and (plan := self._arrival_plan(own)) is not None:
@@ -5651,6 +6015,10 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
                                             for c in waiting)
         if about("terrain") and own is not None and (minimum := self._terrain_floor(own)) is not None:
             facts["minimum altitude here"] = speech.altitude_display(minimum)
+        if about("ride") and own is not None and (ride := self._ride_message(own, text)) is not None:
+            facts["ride reports"] = ride.display
+        if about("clearance") and (cleared := self._clearance_message()) is not None:
+            facts["the flight's clearance now"] = cleared.display
         return facts
 
     def _where_to_park(self, geo: AirportGeometry) -> tuple[float, float] | None:
@@ -5816,7 +6184,8 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
         end = self._runway_end(self.state.flight.origin, own)
         return end.ident if end else None
 
-    def _pushback(self, t: float, facility: Facility, own: OwnshipState | None, *, tail: str | None = None) -> None:
+    def _pushback(self, t: float, facility: Facility, own: OwnshipState | None, *, tail: str | None = None,
+                  released: bool = False) -> None:
         """Push and start, with the nose brought round to face the way the aircraft is about to taxi.
 
         "Tail left" swings the tail to the pilot's left, so the nose comes round to the right: that's for a
@@ -5824,6 +6193,8 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
         airport's taxiways aren't known. A pilot who asks for the tail one way ("can we tail left?") gets it:
         they can see the gate, the stands beside it and the tug.
         """
+        if not released and self._push_or_hold(t, facility, own, tail):
+            return  # held at the gate: traffic behind, or the line at the runway (sequencing.py); ground calls back
         turn = tail if tail in ("left", "right") else self._pushback_turn(own)
         self.cleared_tail = turn
         if turn is None:
@@ -6078,7 +6449,9 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
     def _expect_visual(self, t: float, own: OwnshipState, facility: Facility) -> None:
         """The field in sight, not yet placed for it: expect the visual, vectors on; the turn onto the final clears it."""
         plan = self._arrival_plan(own)
-        if plan is None:
+        if plan is None or not self._visual_weather():
+            # (Under the visual's minimums: the instrument approach stays. "Inbound for landing" at Tarama got "expect
+            # the visual", then "the weather's gone below visual minimums" two minutes later.)
             self._schedule(t, "common.roger", {}, facility, expects_readback=False)
             return
         plan["approach"] = Approach("VISUAL", plan["final"])  # the field in sight: the visual, at the turn in
@@ -6091,6 +6464,14 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
     def _clear_approach(self, t: float, own: OwnshipState, facility: Facility, *, delay: bool) -> None:
         plan = self._arrival_plan(own)
         tower = self.facility("tower")
+        if plan is not None and tower is None and self._untowered_arrival():
+            # No tower there: the approach cleared on its own (the field's frequency follows, once established).
+            self._schedule(t, "approach.cleared_star", {"approach": plan["approach"]}, facility, delay=delay,
+                           clearance="approach",
+                           on_issue=lambda: (self._assign(approach=plan["approach"].display,
+                                                          arrival_runway=plan["approach"].landing_runway),
+                                             setattr(self, "_going_around", False)))
+            return
         if plan is None or tower is None:
             self._schedule(t, "common.roger", {}, facility)
             return
@@ -6134,6 +6515,18 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
         start_nm = max(start_nm, (level - geo.airport.elev_ft) / 1000 * 3 + DECELERATION_NM)
         return geo.distance_nm(own.lat, own.lon) <= start_nm + own.gs_kt / 60 * max(lead_min, DESCENT_LEAD_MIN)
 
+    def _descent_ignored(self, own: OwnshipState) -> bool:
+        """Cleared down, well past where the descent should have begun, and still up there, not descending."""
+        st, geo = self.state, self.geometry(self.state.flight.destination)
+        target = st.assignments.altitude_ft
+        if own.t - getattr(self, "_altitude_given_t", -math.inf) < DESCENT_GIVEN_GRACE_S:
+            return False  # just given: "start your descent now" 31 s after "descend and maintain 3,000" was no time
+        if geo is None or target is None or self._descent_told >= DESCENT_TOLD_MOST or own.vs_fpm < -300 \
+                or own.alt_indicated_ft < target + 3000 or own.t - self._descent_told_t < DESCENT_TOLD_EVERY_S:
+            return False
+        needed = self.route.descent_distance_nm(geo.airport.lat, geo.airport.lon, int(own.alt_indicated_ft), geo.airport.elev_ft)
+        return geo.distance_nm(own.lat, own.lon) <= needed - DESCENT_PAST_NM
+
     def _clear_descent(self, t: float, own: OwnshipState, facility: Facility, plan: dict[str, Any], *, late: bool = False) -> None:
         """The descent from cruise, ahead of the top of descent: "descend via" the filed arrival when there is
         one, otherwise at pilot's discretion to the arrival altitude."""
@@ -6149,6 +6542,7 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
                     self.discretion_alt = altitude  # (after _assign, which clears it)
             return apply
 
+        self._star_for_runway(approach.landing_runway)
         if self.cfg.star:
             planned = self.route.arrival_floor_ft
             if planned is not None and planned > STAR_FLOOR_MAX_FT:
@@ -6158,15 +6552,22 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
                 # "When ready": the crew starts down at their own top of descent (the FMS's), not the plan's. Only a
                 # flight already on the way down (it started before the clearance) gets it without.
                 descending = late and own.vs_fpm < -500
+                # (A level to stop at, cleared: vectored off the arrival, it still is. Taken as the STAR's floor, Dubai's
+                # vectors put the flight at the 11,100 it was passing, unsaid, and the copilot called it 2,000 low.)
                 self._schedule(t, "center.descend_star" if descending else "center.descend_star_pd",
                                {"procedure": self.cfg.star, "approach": approach,
                                                           "altitude": floor}, facility, delay=False,
-                               on_issue=assigned(floor, True), note=self._altimeter_note(st.flight.destination))
+                               on_issue=assigned(floor, False), note=self._altimeter_note(st.flight.destination))
                 return
             self._schedule(t, "center.descend_via", {"procedure": self.cfg.star, "approach": approach}, facility,
                            delay=False, on_issue=assigned(floor, True), note=self._altimeter_note(st.flight.destination))
             return
         altitude, instruction = self._arrival_altitude(plan["center_alt"], own, "center")
+        if instruction == "center.descend":
+            # Kept high until the way there is clear of the terrain, and held up first when the arrivals are stacked.
+            if (route_floor := self._route_floor(own)) is not None and route_floor > altitude:
+                altitude = route_floor
+            altitude = self._flow_level(own, altitude)
         if not late and instruction == "center.descend" and (fix := self._crossing_restriction(own, altitude)) is not None:
             self._schedule(t, "center.descend_cross", {"fix": fix, "altitude": altitude, "approach": approach}, facility,
                            delay=False, on_issue=assigned(altitude, False, discretion=True), note=self._altimeter_note(st.flight.destination))
@@ -6177,6 +6578,58 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
             return
         self._schedule(t, "center.descend_pd", {"altitude": altitude, "approach": approach}, facility, delay=False,
                        on_issue=assigned(altitude, False, discretion=True), note=self._altimeter_note(st.flight.destination))
+
+    def _star_floor(self) -> int | None:
+        """The filed arrival's lowest published altitude (the sim's navdata: its restrictions, "between FL070 and
+        FL110" counting as FL110), on its common part and the landing runway's transition; None: not known."""
+        legs = self._star_legs.get((self.cfg.star or "").upper(), ())
+        runway = (self.state.assignments.arrival_runway or self.cfg.arr_runway or "").upper().lstrip("0")
+        found = []
+        for leg in legs:
+            transition = (leg.transition or "").upper()
+            if transition.startswith("RW") and runway and transition[2:].lstrip("0") != runway:
+                continue  # another runway's way in
+            if leg.altitude in ("at", "above", "below") and leg.alt1_ft > 0:
+                found.append(leg.alt1_ft)
+            elif leg.altitude == "between" and (leg.alt1_ft or leg.alt2_ft):
+                found.append(leg.alt1_ft or leg.alt2_ft)
+        return int(math.ceil(min(found) / 100.0) * 100) if found else None
+
+    def _star_for_runway(self, runway: str | None) -> None:
+        """The filed STAR doesn't go to the runway landing on (the sim's navdata knows its runway transitions): the one
+        from the same place that does is given instead, its fixes in the route in place of the filed one's; with none,
+        no STAR, and vectors. Dubai landing 30L: "cleared VUTE3E arrival", an arrival for 12L and 12R only, and the
+        vectors started before the flight reached it."""
+        dest = (self.state.flight.destination or "").upper()
+        known, filed = self._arrivals_at.get(dest), self.cfg.star
+        if not known or not filed or not runway:
+            return
+        old = list(self.route.fixes)
+        star_fixes = [f for f in old if (f.via or "").upper() == filed.upper()]
+        first = star_fixes[0] if star_fixes else None
+        entry = self._star_entry(first) if first is not None else None
+        before = old[old.index(first) - 1] if first is not None and old.index(first) > 0 else None
+        idents = tuple(f.ident for f in (entry, before, first) if f is not None)
+        chosen = procedures.star_for_runway(known, runway, filed, idents)
+        if chosen is not None and (chosen.name.upper() == filed.upper() or procedures._same_sid(chosen.name, filed)):
+            return
+        start = old.index(first) if first is not None else len(old)
+        head = [f for f in old[:start] if (f.via or "").upper() != filed.upper()]
+        tail = [f for f in old[start:] if (f.via or "").upper() != filed.upper() or f.ident.upper() == dest]  # (the airport)
+        new: list[RouteFix] = []
+        if chosen is not None:
+            have = {f.ident.upper() for f in head[-3:]}
+            entry_name = head[-1].ident if head else ""
+            for leg in procedures.star_route(chosen, runway, entry_name):
+                if leg.lat is None or leg.lon is None or leg.fix.upper() in have:
+                    continue
+                new.append(RouteFix(leg.fix, leg.lat, leg.lon, stage="DSC", via=chosen.name))
+            self._star_legs[chosen.name.upper()] = chosen.legs
+        logging.getLogger(__name__).info("ATC: runway %s in use, the filed %s doesn't go to it: %s", runway, filed,
+                                         f"the {chosen.name} instead" if chosen is not None else "vectors, no STAR")
+        self.route = Route(tuple(head + new + tail))
+        self.cfg = replace(self.cfg, star=chosen.name if chosen is not None else "")
+        self._route_reached = 0 if not hasattr(self, "_route_reached") else min(self._route_reached, len(head))
 
     def _star_floor(self) -> int | None:
         """The filed arrival's lowest published altitude (the sim's navdata: its restrictions, "between FL070 and
@@ -6448,7 +6901,7 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
             # The one the ATIS advertises, if this aircraft can fly it (an RNP one isn't for a Cessna).
             return advertised
         weather = self.weather.surface(dest or "", self.tracker.context_builder.airports)
-        return choose_approach(
+        chosen = choose_approach(
             geo.airport if geo is not None else None, runway, has_ils=has_ils,
             visibility_sm=weather.visibility_sm if weather is not None else None,
             in_cloud=in_cloud,
@@ -6460,6 +6913,13 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
             wind_kt=weather.wind.speed_kt if weather is not None else 0.0,
             gust_kt=weather.gust_kt if weather is not None else None,
         )
+        if chosen.kind == "VISUAL" and not chosen.charted and requested is None and airline:
+            # A named visual to that runway (the River Visual), where the weather's good enough for its landmarks.
+            named = charted_visuals.choose(dest, chosen.runway, self._callsign().ident,
+                                           ceiling_ft=weather.ceiling_ft if weather is not None else None,
+                                           visibility_sm=weather.visibility_sm if weather is not None else None, in_cloud=in_cloud)
+            chosen = named or chosen
+        return chosen
 
     def approaches_at(self, icao: str | None, runway: str) -> tuple[str, ...]:
         """What the airport publishes for a runway (the app and tests show this)."""
@@ -6492,7 +6952,7 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
             # jet up in the flight levels (Seattle: 11,000), the arrival altitude on a short, low flight.
             "center_alt": int(max(3000, math.ceil((elev + 10000) / 1000) * 1000)) if cruise >= 18000
             else int(min(cruise, max(3000, math.ceil((elev + 2500) / 1000) * 1000))),
-            "approach_alt": int(math.ceil((elev + 2000) / 100) * 100),
+            "approach_alt": round_altitude(elev + 2000),
         } | self._terrain_plan(geo, cruise)
 
     def _terrain_plan(self, geo: AirportGeometry, cruise: int) -> dict[str, int]:
@@ -6624,9 +7084,16 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
         if facility.controller in st.comms.contacted and not callsign.is_airline:
             callsign = callsign.short
         slots = {**item.slots, "callsign": callsign}
-        rendered = self.library.render(
-            item.instruction_id, slots, controller=facility.controller,
-            choose=lambda n: personality.wording(facility.station, item.instruction_id, n, self._voice_rng))
+        def choose(n: int) -> int:
+            habit = personality.wording(facility.station, item.instruction_id, n, self._voice_rng)
+            if item.repeat and n > 1:
+                habit = (self._variant.get(item.instruction_id, habit) + 1) % n  # asked again: another way of saying it
+            self._variant[item.instruction_id] = habit
+            return habit
+
+        if item.repeat and item.worded is None and item.lead is None:
+            item.lead = Phrase("I say again", "I say again")  # as a controller repeats, and in other words where it can
+        rendered = self.library.render(item.instruction_id, slots, controller=facility.controller, choose=choose)
         if item.worded is not None:
             # The model's words for it (checked to say the same). What's read back is still the template's.
             rendered = replace(rendered, text=f"{speech.callsign_display(callsign)}, {item.worded.display}.",
@@ -6742,25 +7209,41 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
         Being routed over a runway and never cleared across it leaves the pilot either stopping for a
         clearance that never comes or being blamed for crossing. The clearance comes as they reach it.
         """
-        ctx = self.tracker.context
-        if not self._crossings or ctx.hold_short is None or ctx.hold_short_distance_m is None:
+        if not self._crossings or not ({"taxi", "taxi_in"} & set(self.state.clearances)):
             return None
-        if ctx.hold_short_distance_m > CROSSING_CLEARANCE_M or not ({"taxi", "taxi_in"} & set(self.state.clearances)):
+        near = self._crossing_near(own)
+        if near is None:
             return None
-        runway = ctx.hold_short.runway.name
-        if runway not in self._crossings or runway in self._crossed:
-            return None
+        runway, metres = near
         # Closing on it, not taxiing away from it: just off the runway landed on, the same runway further along the
         # way in is to be crossed later (Heathrow's 09R, cleared across at the 27L exit, three minutes early).
         seen = self._crossing_seen.get(runway)
-        now = (own.t, ctx.hold_short_distance_m)
+        now = (own.t, metres)
         if seen is None or now[0] - seen[0] > CROSSING_TREND_S * 4:
             self._crossing_seen[runway] = now
             return None
         if now[0] - seen[0] < CROSSING_TREND_S:
             return None
         self._crossing_seen[runway] = now
-        return runway if seen[1] - now[1] >= CROSSING_CLOSING_M else None
+        waiting = own.gs_kt < 1.0 and self.state.phase is not None and P(self.state.phase) is P.TAXI_OUT  # stopped there, for it
+        return runway if waiting or seen[1] - now[1] >= CROSSING_CLOSING_M else None
+
+    def _crossing_near(self, own: OwnshipState) -> tuple[str, float] | None:
+        """The runway on the taxi route the aircraft has come to, and how far off: by its hold line, or where the airport
+        has none there, by the runway itself. Miami's data has next to none: nothing ever came up, so no clearance across
+        and never "contact tower"."""
+        ctx = self.tracker.context
+        todo = [r for r in self._crossings if r not in self._crossed]
+        if ctx.hold_short is not None and ctx.hold_short_distance_m is not None \
+                and ctx.hold_short_distance_m <= CROSSING_CLEARANCE_M and ctx.hold_short.runway.name in todo:
+            return ctx.hold_short.runway.name, ctx.hold_short_distance_m
+        if ctx.airport is None or ctx.on_runway:
+            return None
+        xy = ctx.airport.xy(own.lat, own.lon)
+        # (Where there is a hold line of its own coming up, that's the place: the clearance doesn't come 100 m early.)
+        lined = {h.runway.name for h in ctx.airport.hold_shorts if math.dist(h.xy, xy) <= CROSSING_LINE_NEAR_M}
+        best = min(((r.distance_to(xy), r.name) for r in ctx.airport.runways if r.name in todo and r.name not in lined), default=None)
+        return (best[1], best[0]) if best is not None and best[0] <= CROSSING_STRIP_M else None
 
     def _climb_step(self, facility: Facility, own: OwnshipState | None, cruise: int) -> int:
         """The next altitude of the climb. Departure's is the top of its airspace; a centre's is its usual step
@@ -6788,6 +7271,8 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
         if tuned is None or tuned.controller not in ("center", "departure") or not cruise or assigned is None \
                 or assigned >= cruise or (tuned.controller == "departure" and assigned >= min(cruise, DEPARTURE_TOP_FT)):
             return None
+        if tuned.station not in self._checked_in:
+            return None  # not heard from yet: Miami Departure gave a climb the second the pilot tuned in, unannounced
         if tuned.controller == "departure":
             if "descend" in st.flags or "emergency" in st.flags or own.vs_fpm < 300:
                 return None  # only a flight on its way up gets the next step
@@ -6952,6 +7437,11 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
         # the international airport beside it.
         in_range = [g.airport for g in self.tracker.context_builder.airports.values()
                     if is_sector_airport(g.airport) and g.distance_nm(own.lat, own.lon) < SECTOR_NEAREST_NM]
+        # (Coming in from the ocean with no FIR in the data: the destination's own centre, or Santa Maria kept the flight to the coast.)
+        home = self.geometry(self.state.flight.destination) if self.state.flight.destination else None
+        if home is not None and is_sector_airport(home.airport) and all(a.icao != home.airport.icao for a in in_range) \
+                and home.distance_nm(own.lat, own.lon) < SECTOR_DESTINATION_NM:
+            in_range.append(home.airport)
         best = max(in_range, key=lambda a: (max(r.length_m for r in a.runways), a.icao), default=None)
         if best is None:
             return None
@@ -6985,7 +7475,10 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
         # Close to the destination the arrival takes over; no point changing centre first.
         destination_nm = self.tracker.context.destination_distance_nm
         if destination_nm is not None and destination_nm <= SECTOR_LAST_NM:
-            return None
+            home = self.geometry(self.state.flight.destination)
+            theirs = home is not None and candidate.station == sector_center(home.airport).station
+            if not theirs or destination_nm <= SECTOR_ARRIVAL_NM:
+                return None
         return candidate
 
     def _facility_for(self, mhz: float | None) -> Facility | None:
@@ -7216,6 +7709,7 @@ class AtcEngine(VfrMixin, DiversionMixin, ConditionsMixin, HoldsMixin, RoutingMi
                 # Given again, it's to be reached again: 11,000 reached on the climb, then given as the descent
                 # (at pilot's discretion), had "check altitude" said at the top of the descent.
                 self.state.flags.discard(f"reached:{value}")
+                self._altitude_given_t = self._t
                 self._deviation_since = None
             setattr(self.state.assignments, key, value)
 
@@ -7270,6 +7764,15 @@ def _known_fix(said: str, known: set[str]) -> str | None:
             if ratio > score:
                 best, score = fix, ratio
     return best if score >= KNOWN_FIX_RATIO else None
+
+
+def round_altitude(feet: float) -> int:
+    """An altitude as ATC gives one: the thousand when it's no more than 150 ft above it (2,062 is 2,000), else up to
+    the next five hundred (3,235 is 3,500). Dubai's approach gave 2,100 and 3,100: "weird altitude for one hundred feet"."""
+    thousand = int(feet // 1000 * 1000)
+    if feet - thousand <= 150:
+        return thousand
+    return int(math.ceil(feet / 500.0) * 500)
 
 
 def _distance_nm(lat1: float, lon1: float, lat2: float, lon2: float) -> float:

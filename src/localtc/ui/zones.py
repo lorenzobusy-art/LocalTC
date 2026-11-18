@@ -70,13 +70,16 @@ def zones(engine: Any, plan: Any, airport: Callable[[str], Airport | None],
             continue
         facilities = ([f for f in engine.facilities if f.airport == icao] if engine is not None
                       else airport_facilities(found, role=role))
+        info = engine.current_atis(icao) if engine is not None else None
+        shut = info.operations.closed_runways if info is not None and info.operations is not None else frozenset()
         airports.append({
             "icao": icao, "name": found.name, "lat": found.lat, "lon": found.lon, "role": role,
             "tower_nm": TOWER_NM if any(f.controller == "tower" for f in facilities) else 0,
             "stations": [{"controller": f.controller, "station": f.station, "mhz": f.mhz,
                           "tuned": tuned == f, "next": expected == f and tuned != f} for f in facilities],
             "runways": [{"name": r.name, "lat": r.lat, "lon": r.lon, "heading_true": r.heading_true,
-                         "length_m": r.length_m} for r in found.runways],
+                         "length_m": r.length_m, "closed": r.primary.ident in shut or r.secondary.ident in shut}
+                        for r in found.runways],
         })
         area = _terminal(engine, airspace, found, "departure" if role == "departure" else "approach")
         if area is not None:
@@ -223,7 +226,9 @@ def _gate(engine: Any) -> dict[str, Any] | None:
     spot = next((s for s in geo.airport.parking if s.index == a.gate_index), None) if geo is not None else None
     if spot is None:
         return None
-    return {"icao": geo.airport.icao, "name": a.gate, "lat": spot.lat, "lon": spot.lon}
+    # Picked by the pilot and approved isn't ground's yet: "where ground sent you" was shown cruising at FL390.
+    sent = any(iid.startswith("ground.taxi_to_gate") or iid == "ground.taxi_cancelled_ready" for iid in engine.state.issued)
+    return {"icao": geo.airport.icao, "name": a.gate, "lat": spot.lat, "lon": spot.lon, "sent": sent}
 
 
 def _area(area: Area, **flags: bool) -> dict[str, Any]:

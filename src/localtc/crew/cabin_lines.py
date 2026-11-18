@@ -556,7 +556,10 @@ REPLIES: dict[str, tuple[str, ...]] = {
                         "Understood, boarding now."),
     "ground_deboarding": ("Thanks, Captain, we'll start getting everyone off.", "Understood, deboarding now.",
                           "Okay, opening up and getting them off."),
+    "ground_hurry": ("Good idea, Captain. I'll get the ramp to speed them along.", "Will do, Captain, asking the ramp to hurry them on."),
     "ground_not_yet": ("We can't start that just yet, Captain.", "Not from here just yet, Captain: the ramp can't do that now."),
+    "ground_early": ("Boarding now, Captain. Just so you know, we're ahead of the plan: {reason}",
+                     "Starting them now, Captain. A bit early by the plan ({reason}), but we'll make it work."),
     "drink": ("Of course. One {drink}, coming right up.", "No problem, I'll bring a {drink} up in a moment.",
               "Sure thing. A {drink} it is."),
     "drink_both": ("Two {drink}s, coming up.", "Of course. I'll bring two {drink}s up."),
@@ -717,7 +720,7 @@ FOREIGN: dict[str, dict[str, str]] = {
     "pt": {
         "delay": "Senhoras e senhores, pedimos desculpa pelo atraso da nossa partida. Partiremos assim que possível. "
                  "Obrigado pela vossa paciência.",
-        "boarding": "Bom dia e bem-vindos a bordo do voo {flight} da {airline} com destino a {dest}. Por favor, coloquem "
+        "boarding": "Bem-vindos a bordo do voo {flight} da {airline} com destino a {dest}. Por favor, coloquem "
                     "a bagagem nos compartimentos superiores ou debaixo do assento à vossa frente.",
         "welcome": "Senhoras e senhores, em nome do comandante e de toda a tripulação, bem-vindos a bordo do voo "
                    "{flight} da {airline} com destino a {dest}. O nosso tempo de voo será de {ltime}. Por favor, "
@@ -872,3 +875,13 @@ FOREIGN: dict[str, dict[str, str]] = {
         "doors_disarm": "乘务员，请解除滑梯预位并交叉检查。",
     },
 }
+
+
+def _more() -> None:
+    from localtc.crew.cabin_foreign_more import MORE
+
+    for code, lines in MORE.items():
+        FOREIGN.setdefault(code, {}).update(lines)
+
+
+_more()

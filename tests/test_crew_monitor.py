@@ -95,6 +95,15 @@ def test_the_takeoff_speed_calls_v1_and_rotate():
     assert any(w.startswith(ways_of("V1.")) for w in words) and any(w.startswith(ways_of("Rotate.")) for w in words)
 
 
+def test_v1_and_rotate_the_same_is_called_rotate_alone():
+    pm = crew(perf=PlanPerf(v1=140, vr=141, v2=150), plan_source="simbrief")
+    pm.observe(PhaseChanged(t=0.5, previous="RUNWAY_HOLD", phase="TAKEOFF"))
+    pm.observe(systems(0.6))
+    words = said(fly(pm, [own(1 + i, on_runway=True, ias_kt=ias, gs_kt=ias) for i, ias in enumerate(range(20, 160, 10))]))
+    assert any(w.startswith(ways_of("Rotate.")) for w in words)
+    assert not any("V1" in w for w in words)
+
+
 def test_positive_rate_then_the_copilot_raises_the_gear_itself():
     pm = crew()
     pm.observe(PhaseChanged(t=0.5, previous="TAKEOFF", phase="DEPARTURE"))
@@ -193,8 +202,8 @@ def test_an_aircraft_without_a_checklist_gets_none_made_up():
 
 
 def test_the_airbus_line_up_checklist_is_its_real_one_challenge_and_response():
-    """The A320's own normal checklist (the QRH's): its items read in order, the captain's asked and waited for, the
-    copilot's own (TCAS) answered and set by itself."""
+    """The A320's own normal checklist (the QRH's): its items read in order, the captain's asked and waited for
+    (the transponder's mode too: the copilot only does its code)."""
     pm = crew(perf=PlanPerf(takeoff_flaps="1+F"))
     pm.observe(PhaseChanged(t=0.5, previous="TAXI_OUT", phase="RUNWAY_HOLD"))
     pm.observe(systems(0.6))
@@ -204,9 +213,9 @@ def test_the_airbus_line_up_checklist_is_its_real_one_challenge_and_response():
     states = [o for o in out if isinstance(o, ChecklistState)]
     assert states and states[0].status == "started" and "QRH" in states[0].source
     out = pm.observe(IntercomHeard(t=3, text="one six right, both"))
-    words = " ".join(said(out))
-    assert words.startswith("TCAS, TA or TA/RA, set.") and words.endswith("Packs 1 and 2?")
-    assert [o for o in out if isinstance(o, SetSimVar) and o.name == "TRANSPONDER STATE:1"]  # TA/RA set by the copilot
+    assert " ".join(said(out)) == "TCAS?"
+    assert not [o for o in out if isinstance(o, SetSimVar) and o.name == "TRANSPONDER STATE:1"]
+    assert said(pm.observe(IntercomHeard(t=3.5, text="TA RA"))) == ["Packs 1 and 2?"]
     out = pm.observe(IntercomHeard(t=4, text="on"))
     assert said(out) == ["Line-up checklist complete."]
     assert [o.status for o in out if isinstance(o, ChecklistState)][-1] == "completed"
@@ -379,17 +388,17 @@ def test_a_whole_recorded_flight_with_the_copilot_listening():
     assert max(words.count(w) for w in set(words)) <= 2 and "One thousand to go." not in words
 
 
-def test_standard_is_set_at_the_transition_even_with_a_qnh_of_1013():
-    """QNH 1013 reads 29.92: it was taken for standard already, and nothing was set."""
+def test_the_transition_is_called_and_the_altimeter_left_to_the_pilot():
+    """ "Just get rid of all altimeter actions because it's so inconsistent on these planes": the copilot calls the
+    transition and sets nothing."""
     pm = crew(checklist_setting="off")  # (the after takeoff checklist would be offered first)
     pm.observe(PhaseChanged(t=0.5, previous="TAKEOFF", phase="DEPARTURE"))
     pm.observe(systems(0.6))
     out = fly(pm, [own(1 + i, on_ground=False, alt_agl_ft=17000 + 300 * i, alt_indicated_ft=17500 + 300 * i,
                        alt_msl_ft=17500 + 300 * i, vs_fpm=2000, ias_kt=280, gs_kt=280, gear_down=False, flaps_index=0)
                    for i in range(5)])
-    assert "Transition, standard set." in said(out)
-    # (The A320neo's baro knobs pulled: KOHLSMAN_SET at 29.92 left them on QNH 1013.)
-    assert any(getattr(o, "name", "") in ("KOHLSMAN_SET", "INSTRUMENT_QNH_CPT_PULL") for o in out)
+    assert "Transition, standard." in said(out)
+    assert not any(getattr(o, "name", "") in ("KOHLSMAN_SET", "INSTRUMENT_QNH_CPT_PULL") for o in out)
 
 
 def test_no_anti_ice_question_in_cloud():
@@ -548,3 +557,20 @@ def test_the_seatbelt_sign_stays_on_until_the_engines_are_off_at_the_gate():
     pm.observe(systems(2, seatbelt=True))
     out = fly(pm, [own(3 + i, parking_brake=True) for i in range(5)])
     assert not [w for w in said(out) if "Seatbelt sign off" in w]
+
+
+def test_an_apu_reading_stuck_at_full_all_through_the_cruise_isnt_taken_for_a_running_apu():
+    """The iniBuilds A330's read 100% from gate to gate: "APU's running" was said at the stand with it off."""
+    engine = FakeEngine()
+    pm = crew(engine)
+    pm.observe(PhaseChanged(t=0.5, previous="DEPARTURE", phase="CRUISE"))
+    pm.observe(systems(0.6, apu_pct=1.0))
+    fly(pm, [own(1 + i * 60, on_ground=False, alt_agl_ft=35000, alt_indicated_ft=37000, ias_kt=260, gs_kt=480,
+                 gear_down=False, flaps_index=0) for i in range(25)])
+    pm.observe(PhaseChanged(t=2000, previous="LANDING", phase="TAXI_IN"))
+    engine.assigned_gate_position = lambda: (47.0, -121.996)
+    out = fly(pm, [own(2001 + i * 5, on_ground=True, gs_kt=15.0, alt_agl_ft=0.0) for i in range(12)])
+    assert set(ways_of("Starting the APU.")) & set(said(out))
+    out = fly(pm, [own(2100 + i * 10, on_ground=True, gs_kt=10.0, alt_agl_ft=0.0) for i in range(30)])
+    assert "APU's running. APU bleed on." not in said(out)
+    assert any("can't read it" in w for w in said(out)), said(out)

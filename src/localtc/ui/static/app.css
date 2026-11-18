@@ -123,7 +123,7 @@ a { color: var(--cyan); }
 /* --- tabs --- */
 .tabs { display: flex; gap: 6px; padding: 10px 10px 0; background: var(--bg); overflow-x: auto; }
 .tab { background: var(--panel-2); border: 1px solid var(--line); border-bottom: 0; color: var(--text-2); padding: 7px 14px; border-radius: var(--radius) var(--radius) 0 0;
-  cursor: pointer; white-space: nowrap; }
+  cursor: pointer; white-space: nowrap; flex: 1 0 auto; text-align: center; }  /* (across the window, wider with it) */
 .tab:hover { background: #3a4048; }
 .tab.active { background: var(--panel); color: var(--text-strong); font-weight: 600; box-shadow: inset 0 2px 0 var(--green-dim); }
 
@@ -155,7 +155,7 @@ main { flex: 1 1 auto; min-height: 0; position: relative; background: var(--pane
 .enroute { padding: 10px 14px; flex: none; }
 .er-top { display: flex; justify-content: space-between; gap: 12px; align-items: center; flex-wrap: wrap; }
 .er-airline { display: flex; gap: 10px; align-items: center; min-width: 0; }
-.er-airline img { height: 30px; max-width: 120px; object-fit: contain; background: #fff; border-radius: 3px; padding: 2px 4px; }
+.er-airline img { height: 30px; max-width: 120px; object-fit: contain; border-radius: 3px; }  /* (no white card behind it: it sits on the panel) */
 .er-badge { display: inline-grid; place-items: center; min-width: 42px; height: 30px; border-radius: 3px; font-weight: 700;
   color: #fff; font-size: 13px; padding: 0 6px; }
 .er-badge:empty { display: none; }
@@ -185,9 +185,10 @@ main { flex: 1 1 auto; min-height: 0; position: relative; background: var(--pane
   border-radius: 1px; background: var(--line-2); opacity: 0; transition: opacity .15s; }
 .splitter:hover::after, .splitter.dragging::after { opacity: 1; }
 .panel.sized { overflow: auto; }
-.mapfreqs { position: absolute; left: 10px; top: 84px; z-index: 500; max-height: calc(100% - 150px); overflow: auto;
+/* At the top, between the zoom buttons and the map's own buttons (.mapctl, right-anchored, about 480 wide). */
+.mapfreqs { position: absolute; left: 54px; top: 10px; z-index: 500; max-height: calc(100% - 30px); overflow: auto;
   background: rgba(20, 23, 27, .9); border: 1px solid rgba(255, 255, 255, .12); border-radius: 3px; padding: 6px 8px;
-  font-size: 12px; max-width: min(420px, calc(100% - 20px)); }
+  font-size: 12px; max-width: max(150px, min(420px, calc(100% - 554px))); }
 .mapfreqs[hidden] { display: none; }
 .mapfreqs .fq-fold { display: flex; align-items: center; gap: 6px; width: 100%; padding: 0; border: 0; background: none;
   color: inherit; font: inherit; font-weight: 600; cursor: pointer; }
@@ -206,7 +207,6 @@ html[data-theme="daylight"] .mapfreqs { background: rgba(255, 255, 255, .94); co
 .online { padding: 8px 14px; flex: none; }
 .online-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
 .online .seg .btn[aria-pressed="true"] { background: var(--teal); border-color: #41807b; color: #fff; }
-.online-note-need { color: #e0b44c; }
 .online-rule { margin-top: 4px; max-width: 900px; }
 
 .log .empty { text-align: center; margin-top: 40px; }

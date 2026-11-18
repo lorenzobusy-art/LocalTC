@@ -17,10 +17,11 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from localtc.ground import grammar as g
-from localtc.ground.api import GroundState, Menu, Service
+from localtc.ground.api import SPEEDS_UP, GroundState, Menu, Service
 from localtc.ground import words as foreign
 from localtc.ground.lines import SPOKEN, Words, spoken_list
 from localtc.ground.menu import Close, MenuRun, Open, Pick, Want, find, has_words, is_question, norm, real_entries, row_of
+from localtc.ground.menu import stand as _stand
 from localtc.sim_api import OwnshipState, RampSpeech
 from localtc.sim_api.ramp import RAMP_MHZ, on_ramp
 
@@ -42,7 +43,8 @@ GSX_STATE_VARS = {"Boarding": "L:FSDT_GSX_BOARDING_STATE", "Deboarding": "L:FSDT
 GSX_TOOK = (4.0, 5.0)  # requested, performing
 # Lines with a condition or a fact in them: a model rewording "parking brake first" said "parking brake set", and "the jetway
 # isn't running" said "jetway's down". Said as written.
-AS_WRITTEN = ("off", "cleaning_after", "say_again", "brake_for_bridge", "brakes_set_first", "stopped_first", "engines_off_first", "on_stand_first", "fuel_engines",
+BAGS_ASKED = re.compile(r"\b(?:how long|when|status|eta|how are|how's|where are)\b.*\b(?:bags?|baggage|luggage|cargo)\b", re.I)
+AS_WRITTEN = ("slot", "status", "off", "cleaning_after", "say_again", "brake_for_bridge", "brakes_set_first", "stopped_first", "engines_off_first", "on_stand_first", "fuel_engines",
               "cancel_nothing", "off_nothing", "no_take", "no_gsx", "not_here", "parked_at", "parked_unknown")
 OURS_S = 120.0  # GSX's questions this soon after calling a service are about it
 CALL_GAP_S = 4.0  # between the crew's own calls
@@ -66,6 +68,8 @@ TUG_OFF = ("lowering nose gear", "tug backing away", "removing bypass pin", "dis
 ENGINE_WAIT = ("engine-start confirmation", "engine start confirmation")
 RELEASE_AGAIN_S = 25.0  # released before the tug was on, and still nothing: the pilot is told to set it and let it go
 ENGINE_OPEN_AGAIN_S = 20.0  # GSX waiting on the good start with its menu shut: opened again after this long
+OURS_OPEN_S = 5.0  # a menu page this soon after the crew opened GSX's menu is the crew's
+ENGINE_OPENS_MAX = 2  # opened this often for the good start and shown "Interrupt pushback?": left to the pilot
 DIRECTIONS = {g.NOSE_LEFT: ("nose left",), g.NOSE_RIGHT: ("nose right",), g.STRAIGHT: ("straight",)}
 SAID_DIRECTION = {g.NOSE_LEFT: "nose left, tail right", g.NOSE_RIGHT: "nose right, tail left", g.STRAIGHT: "straight back"}
 SIDE = {g.NOSE_LEFT: "right", g.NOSE_RIGHT: "left"}  # the headset's side: the side the tail went, clear of the engines
@@ -118,6 +122,7 @@ class RampCrew:
         self.atc_until = 0.0
         self._t = 0.0
         self._engine_open_t = -1e9  # when GSX's menu was last opened for its good-start question
+        self._engine_opens_wasted = 0  # opened for it and GSX showed "Interrupt pushback?" instead
         self._spoke_t = -1e9
         self._queue: list[str] = []
         self._sending: tuple[str, float] | None = None
@@ -147,6 +152,11 @@ class RampCrew:
         self._door_t: dict[str, float] = {}
         self._said_differs = False
         self._gate_told = False
+        self._hurried: set[str] = set()  # sped up through GSX's settings: put back when the service is over
+        self._hurry_asked: list[str] = []  # the cabin crew asked for it
+        self._hurry_quiet: set[str] = set()  # ... and said so to the captain: the ramp says nothing more
+        self.turnaround: Any = None  # the turnaround's timeline (turnaround_plan.Turnaround), wired by the app
+        self._slot_wait: list[str] = []  # asked for ahead of their slot, or of what they wait on: called when they can come
         self._fuel_wanted = 0  # the fuel asked for, in percent, for when GSX asks
         self._finished: list[str] = []  # done this turnaround (GSX shows "completed" for only a few seconds)
         self._bridge: dict[str, bool] = {}  # the jetway and stairs: on the aircraft or not, as GSX last said (one call moves them either way)
@@ -220,7 +230,14 @@ class RampCrew:
     def heard(self, text: str, t: float) -> list[Any]:
         """The pilot's words (on the ramp's frequency, or claimed on the intercom)."""
         self._t = t
+        if self.turnaround is not None and BAGS_ASKED.search(text):
+            return [self._speech("status", t, report=self.turnaround.answer("ramp", text))]
         asks = g.parse(self.read(text))
+        if asks and self.language and all(a.action == g.REQUEST for a in asks) and foreign.unread(text, self.language):
+            # A word left that the ramp couldn't read, beside the services: likely the verb misheard ("Catering,
+            # Applichen" for "Catering abbrechen"), so asked again, never the service ordered instead of cancelled.
+            log.info("Ramp: %r has %s it couldn't read: asked again", text, foreign.unread(text, self.language))
+            asks = ()
         if not asks:
             if (said := self._by_label(text, t)) is not None:
                 return said
@@ -302,11 +319,32 @@ class RampCrew:
                     out.append(self._speech("already", t, name=self._name(service)))
                 elif svc.state == "unavailable" or (not svc.can_trigger and svc.state != "completed"):
                     out.append(self._speech("not_here", t, name=self._name(service)))
+                elif (why := self._held(service, t)) is not None:
+                    out.append(self._speech("slot", t, why=why))
+                    if service not in self._slot_wait:
+                        self._slot_wait.append(service)
                 else:
+                    if service in self._slot_wait:
+                        self._slot_wait.remove(service)
                     self._queue.append(service)
                     coming.append(self._name(service))
         if coming:
             out.insert(0, self._speech("ack", t, list=self._names(coming)))
+        return out
+
+    def _held(self, service: str, t: float, *, ask: bool = True) -> str | None:
+        return self.turnaround.hold(service, t, ask=ask) if self.turnaround is not None else None
+
+    def _slots_open(self, t: float) -> list[Any]:
+        """A service that had to wait its slot, or for what it depends on, called now it can come."""
+        out: list[Any] = []
+        for service in list(self._slot_wait):
+            if self._held(service, t, ask=False) is None:
+                self._slot_wait.remove(service)
+                svc = self._service(service)
+                if svc is not None and not svc.active and service not in self._queue:
+                    self._queue.append(service)
+                    out.append(self._speech("ack", t, list=self._name(service)))
         return out
 
     def _deboarding(self) -> bool:
@@ -336,13 +374,32 @@ class RampCrew:
             return [self._speech("relay_boarding", t), *said]
         return [self._speech("ack", t, list=self._name(service))]
 
-    def called_by_cabin(self, service: str, t: float) -> bool:
-        """The cabin crew told to start boarding or deboarding: called without a word from the ramp. False: it can't be."""
+    def called_by_cabin(self, service: str, t: float) -> bool | str:
+        """The cabin crew told to start boarding or deboarding: called without a word from the ramp. False: it can't be.
+        Ahead of the turnaround's plan, it starts all the same (the captain's call: asked three times at O'Hare before it
+        did), and the reason it would have waited is returned for the cabin to mention."""
         svc = self._service(service)
         if not self.parked or svc is None or svc.state == "unavailable":
             return False
+        early = self._held(service, t, ask=False)
+        if early is not None and self.turnaround is not None:
+            self.turnaround.waive(service)
+        if service in self._slot_wait:
+            self._slot_wait.remove(service)
         if not svc.active and service not in self._queue:
             self._queue.append(service)
+        return early if early is not None else True
+        if not svc.active and service not in self._queue:
+            self._queue.append(service)
+        return True
+
+    def hurry_by_cabin(self, service: str, t: float) -> bool:
+        """The cabin crew told to speed up boarding or deboarding: the same as asking the ramp. False: it isn't under way."""
+        svc = self._service(service)
+        if svc is None or not svc.active:
+            return False
+        self._hurry_asked.append(service)
+        self._hurry_quiet.add(service)
         return True
 
     def ask_for(self, service: str, t: float) -> list[Any]:
@@ -353,6 +410,9 @@ class RampCrew:
         return self._request((service,), t) if self.parked else [self._speech("on_stand_first", t)]
 
     def _status(self, named: tuple[str, ...], t: float) -> list[Any]:
+        if self.turnaround is not None and self.turnaround.role == "departure":
+            words = " ".join(n.lower() for n in named)  # (a service named: when it'll be done, and why)
+            return [self._speech("status", t, report=self.turnaround.answer("ramp", words))]
         services = self.state.services
         if named:
             parts = []
@@ -412,8 +472,32 @@ class RampCrew:
         svc = self._service(service)
         if svc is None or not svc.active:
             return [self._speech("cancel_nothing", t, name=self._name(service))]
+        if service in self._hurried:
+            quiet = service in self._hurry_quiet
+            self._hurry_quiet.discard(service)
+            return [] if quiet else [self._speech("hurrying", t, name=self._name(service))]
+        if service in SPEEDS_UP and "settings" in self.state.capabilities:
+            return [SpeedUp(service)]  # (``hurried`` says how that went)
         self._offer = ("finish", service)
         return [self._speech("cant_hurry", t, name=self._name(service))]
+
+    def hurried(self, service: str, ok: bool, t: float) -> list[Any]:
+        """What came of asking GSX to speed it up (an older GSX, or no such setting: the offer to finish it instead).
+        Asked through the cabin crew, who answered the captain already: nothing from the ramp as well ("why did this even
+        reach the ramp?")."""
+        quiet = service in self._hurry_quiet
+        self._hurry_quiet.discard(service)
+        if ok:
+            self._hurried.add(service)
+            return [] if quiet else [self._speech("hurrying", t, name=self._name(service))]
+        self._offer = ("finish", service)
+        return [self._speech("cant_hurry", t, name=self._name(service))]
+
+    def _hurry_over(self) -> list[Any]:
+        """Boarding or deboarding hurried, and over: GSX's setting put back as it was."""
+        over = [s for s in self._hurried if (svc := self._service(s)) is None or not svc.active]
+        self._hurried.difference_update(over)
+        return [SlowDown(s) for s in over]
 
     def _off(self, service: str, t: float) -> list[Any]:
         svc = self._service(service)
@@ -635,29 +719,59 @@ class RampCrew:
         self._seen_question = menu
         if has_words(menu.title, "interrupt"):
             # "Interrupt pushback?": GSX's page while it's already doing what was asked. It went up and down four times in
-            # ten seconds, read out each time, and "yes" would have stopped the push. Put away; "stop the push" still stops it.
-            log.info("Ground crew: closing GSX's %r page", menu.title)
-            return [Close()]
+            # ten seconds, read out each time, and "yes" would have stopped the push. Never read out. Put away only when the
+            # crew opened the menu itself (for the good start); one the pilot opened is theirs: closing it every few
+            # seconds kept the pilot from GSX's good-start page at Miami and Fort Lauderdale.
+            if t - self._engine_open_t <= OURS_OPEN_S:
+                self._engine_opens_wasted += 1
+                log.info("Ground crew: closing GSX's %r page (opened for the good start)", menu.title)
+                return [Close()]
+            return []
+        if self._is_engine_question(menu) and self.own is not None and self.own.engine_running \
+                and (found := find(menu, GOOD_START_ROW)).index is not None:
+            # The engines are running and the headset sees them: the good start put in, not asked and waited on (the
+            # pilot was left looking for it in GSX).
+            self._asking = None
+            self._seen_question = None
+            return [Pick(found.index, menu.entries[found.index]), self._speech("good_start", t)]
         if (said := self._read_out.get(menu.title)) is not None and t - said < READ_AGAIN_S:
             self._asking = menu  # (the same question again: GSX's menu comes and goes. Still answerable)
             return []
         self._read_out[menu.title] = t
         if has_words(menu.title, "operator"):
             real = [(i, e) for i, e in real_entries(menu) if not (i < len(menu.disabled) and menu.disabled[i])]
-            airline = norm(self.link.airline())
-            own = next((i for i, e in real if airline and airline in norm(e)), None)
+            # The airline's own handling by any of its names ("Emirates", the callsign's word, its codes: "UAE", "EK")
+            names = {norm(n) for n in self.link.airline().split("|") if n.strip()}
+            own = next((i for i, e in real if any(n and (f" {n} " in f" {norm(e)} ") for n in names)), None)
             choice = own if own is not None else next((i for i, e in real if OPERATOR_CHOICE in norm(e)), real[0][0] if real else None)
+            log.info("Ground crew: %r for %s: %s (of %s)", menu.title, "/".join(sorted(names)) or "no airline",
+                     menu.entries[choice] if choice is not None else "none", ", ".join(e for _, e in real))
             if choice is not None:
                 return [Pick(choice, menu.entries[choice])]
         if has_words(menu.title, "refueling level"):
             return self._fuel_question(menu, t)
+        if has_words(menu.title, "change parking") and self._asking is None:
+            # GSX's parking page: the aircraft isn't parked as far as it knows (asked for the jetway still rolling
+            # in at Dubai, its eight choices were read over the radio). The services come once it's parked.
+            if (found := find(menu, ("activate services",))).index is not None:
+                return [Pick(found.index, menu.entries[found.index])]
+            log.info("Ground crew: GSX's %r page: not parked yet, closed", menu.title)
+            return [Close(), self._speech("not_parked", t)]
+        if has_words(menu.title, "pushback tug") and self._push is not None and self._push.stage != "armed" \
+                and (found := find(menu, ("yes",))).index is not None:
+            # The push called: the tug's wanted now. "No" to it (right while boarding) left an A350 at Montreal's gate
+            # nine minutes, until the pilot pushed through GSX by hand.
+            log.info("Ground crew: %r: yes, the push is called", menu.title)
+            return [Pick(found.index, menu.entries[found.index])]
         for words, answer in SETTLED:
             if has_words(menu.title, words) and (found := find(menu, answer)).index is not None:
+                log.info("Ground crew: %r: %s", menu.title, menu.entries[found.index])
                 return [Pick(found.index, menu.entries[found.index])]
         rows = {d: find(menu, words) for d, words in DIRECTIONS.items()}
         if any(f.index is not None for f in rows.values()):
             return self._direction_question(menu, rows, t)
         if (gsx_choice := find(menu, (OPERATOR_CHOICE,))).index is not None:
+            log.info("Ground crew: %r: GSX's own choice, %s", menu.title, menu.entries[gsx_choice.index])
             return [Pick(gsx_choice.index, menu.entries[gsx_choice.index])]  # GSX's own recommendation, whatever it's asking
         if self._is_engine_question(menu):
             # Asked, as a headset operator asks: "good engine start?", and put in GSX on the pilot's "yes".
@@ -706,10 +820,22 @@ class RampCrew:
 
     def _engines_answer(self, t: float) -> list[Any]:
         """GSX waiting on the good-start question with its menu shut (it asks only once the menu's open): opened, so the
-        question comes up and is put to the pilot. Answered only by the pilot."""
+        question comes up and is put to the pilot. Answered by the pilot, or put in once the engines are seen running."""
+        menu = self.state.menu
+        if menu is not None and self._asking == menu and self._is_engine_question(menu) and self.own is not None \
+                and self.own.engine_running and (found := find(menu, GOOD_START_ROW)).index is not None:
+            # Asked before they were started, and now they're running: put in, as when they're seen first.
+            self._asking = None
+            self._seen_question = None
+            return [Pick(found.index, menu.entries[found.index]), self._speech("good_start", t)]
         svc = self._service("Departure")
         if svc is None or self.state.menu is not None or not any(w in norm(svc.status) for w in ENGINE_WAIT) \
                 or t - self._engine_open_t < ENGINE_OPEN_AGAIN_S or self._run is not None:
+            return []
+        if self._engine_opens_wasted >= ENGINE_OPENS_MAX:
+            if self._engine_opens_wasted == ENGINE_OPENS_MAX:
+                self._engine_opens_wasted += 1
+                return [self._speech("start_in_gsx", t)]  # once: it's the pilot's to put in, in GSX's menu
             return []
         self._engine_open_t = t
         return [Open()]
@@ -810,6 +936,10 @@ class RampCrew:
         low = text.lower()
         if low.startswith("waiting for your action"):
             door = text.split(":", 1)[-1].strip()
+            if (m := re.match(r"(?i)(open|close)\s+(.+)$", door)) is not None:
+                # GSX's "open Forward Service": "open the forward service door", as someone would say it.
+                name = " ".join(w.lower() if w.isalpha() and len(w) > 2 else w for w in m.group(2).split())  # (R4 stays R4)
+                door = f"{m.group(1).lower()} the {name}{'' if 'door' in name else ' door'}"
             if t - self._door_t.get(door, -1e9) >= DOOR_AGAIN_S:
                 self._door_t[door] = t
                 self._calls.append((t, ROUTINE, "door", {"door": door}))
@@ -873,7 +1003,12 @@ class RampCrew:
         out += self._push_moves(t)
         out += self._engines_answer(t)
         out += self._once_braked(t)
+        out += self._slots_open(t)
         out += self._send_next(t)
+        asked, self._hurry_asked = self._hurry_asked, []
+        for service in asked:
+            out += self._hurry(service, t)
+        out += self._hurry_over()
         out += self._due_calls(t)
         out += self._gate_to_gsx(t)
         out += self._parked_elsewhere(t)
@@ -969,6 +1104,20 @@ class Send:
 
 
 @dataclass(frozen=True)
+class SpeedUp:
+    """Hurry this service, through GSX's settings."""
+
+    service: str
+
+
+@dataclass(frozen=True)
+class SlowDown:
+    """Put back the setting that hurried it."""
+
+    service: str
+
+
+@dataclass(frozen=True)
 class SelectGate:
     """Tell GSX which stand this is."""
 
@@ -978,11 +1127,6 @@ class SelectGate:
 def _plain(entry: str) -> str:
     """A menu row as said aloud: without GSX's marks."""
     return " ".join(entry.replace("[GSX choice]", "").replace("▶", "").replace("↑", "").split()).rstrip("?. ")
-
-
-def _stand(name: str) -> str:
-    """A stand's name to compare by: "Gate B 37", "B37"."""
-    return norm(name).replace("gate", "").replace("stand", "").replace("parking", "").replace(" ", "")
 
 
 SPOKEN_ROW = {"GPU": "ground power", "Water": "water", "Lavatory": "lavatory", "Catering": "catering", "Refueling": "refueling",

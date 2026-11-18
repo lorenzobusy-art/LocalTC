@@ -193,6 +193,8 @@ def traffic_atc(engine) -> "AtcLink":
                 end = runway.end_for_heading(own.hdg_true, 90) or runway.ends[0]
                 return icao, end.ident, "on"
             if ("takeoff" in c or "line_up" in c) and a.departure_runway and icao == st.flight.origin:
+                if "takeoff" not in c and engine.conditions.active("behind_landing", a.departure_runway) is not None:
+                    continue  # lining up behind the landing traffic: that one's runway first (it was sent around for it)
                 return icao, a.departure_runway, "takeoff"
         return None
 
@@ -312,6 +314,23 @@ RAMP_STYLE = ("Ramp, catering, fuel and a GPU please. Pushback, nose left. Tail 
               "De-icing. Brakes set. Brakes released. Good start. Change to gate B40.")
 
 
+def start_turnaround(cfg: Config, engine, bus, consumers: list):
+    """The turnaround's timeline for this flight; None with ``[turnaround] mode = "off"``."""
+    if cfg.turnaround.mode == "off":
+        return None
+    from localtc.turnaround_plan import Facts, Turnaround, TurnaroundService
+
+    def facts() -> Facts:
+        known = cabin_facts(engine, cfg)
+        perf = cfg.flight.perf
+        return Facts(callsign=known.callsign, aircraft=known.aircraft, pax=perf.pax, block_fuel_lb=perf.block_fuel_lb,
+                     sched_out_s=perf.sched_out_s, sched_in_s=perf.sched_in_s, seed=cfg.atc.seed)
+
+    tracker = Turnaround(facts(), mode=cfg.turnaround.mode, profile=cfg.turnaround.profile)
+    consumers.append(asyncio.create_task(TurnaroundService(tracker, bus, make=facts).run()))
+    return tracker
+
+
 def start_ground(cfg: Config, engine, source, bus, backend, get_cabin):
     """The ground crew, and who does their work: GSX where it's installed, else the sim's own services (None: no crew)."""
     from localtc.atc_core.region import accent
@@ -337,7 +356,7 @@ def start_ground(cfg: Config, engine, source, bus, backend, get_cabin):
 
         adapter = SimServices(lambda command: asyncio.ensure_future(source.send(command)), source.clock.now)
     else:
-        adapter = gsx_remote.GsxRemote()
+        adapter = gsx_remote.GsxRemote(paces_file=data_dir() / "gsx_paces.json")
 
     def relay(what: str, t: float):
         cabin = get_cabin()
@@ -348,7 +367,8 @@ def start_ground(cfg: Config, engine, source, bus, backend, get_cabin):
 
     link = RampLink(pushback_cleared=lambda: "pushback" in engine.state.clearances,
                     atc_working=lambda: engine.facility("ground") is not None or engine.facility("tower") is not None,
-                    gate=lambda: engine.gate_given() or "",
+                    # The arrival's gate, once there: the one picked for San Juan was told to GSX at Fort Lauderdale.
+                    gate=lambda: (engine.gate_given() or "") if engine._landed else "",
                     cleared_push_way=lambda: {"left": "nose_right", "right": "nose_left"}.get(engine.cleared_tail or "", ""),  # tail left: nose right
                     airline=lambda: _airline_name(engine),
                     request_gate=lambda label: engine.request_gate(engine.state.flight.destination, label),
@@ -630,13 +650,14 @@ async def run_session(
             atc_service = AtcService(engine, bus, source, AirportCache(), copilot=copilot)
             atc_service.deck = deck
             if session.source_kind == "live" and os.environ.get("LOCALTC_METAR", "1"):
-                from localtc.metar_data import AtisStore, MetarStore
+                from localtc.metar_data import AtisStore, MetarStore, PirepStore
 
                 # The departure's and destination's real METARs and ATIS, as [atc] atis_source uses them.
                 if cfg.atc.atis_source in ("real", "hybrid"):
                     atc_service.weather_source = MetarStore().get
                     atc_service.atis_source = AtisStore().get
                     engine.real_weather_coming = True
+                atc_service.pirep_source = PirepStore().get  # the ride reports ATC gives (atc_core/rides.py)
             if session.source_kind == "live" and engine.cfg.online_network:
                 from localtc.online import OnlineStore
 
@@ -660,12 +681,18 @@ async def run_session(
                 cabin.model_wait_s = max(cfg.crew.timeout_s, cfg.cloud.timeout_s)
                 consumers.append(asyncio.create_task(CabinService(cabin, bus, intercom=not cfg.crew.enabled,
                                                                   source=source).run()))
+            turnaround = start_turnaround(cfg, engine, bus, consumers) if session.source_kind == "live" else None
+            if cabin is not None:
+                cabin.turnaround = turnaround
+                cabin.critical = lambda: "emergency" in engine.state.flags
             if cfg.ground.enabled and session.source_kind == "live":  # the ramp: their frequency, and "ramp, ..." on the intercom
                 ground = start_ground(cfg, engine, source, bus, backend, lambda: cabin)
                 if ground is not None:
+                    ground.crew.turnaround = turnaround
                     engine.ramp_mhz = RAMP_MHZ
                     if cabin is not None:
                         cabin.ground_call = ground.crew.called_by_cabin
+                        cabin.ground_hurry = ground.crew.hurry_by_cabin
                     consumers.append(asyncio.create_task(ground.run()))
             if cfg.crew.enabled:  # the copilot on the intercom: hears the pilot, works the aircraft
                 from localtc.crew.pm import PilotMonitoring
@@ -1042,7 +1069,7 @@ def cabin_settings(cfg: Config):
     from localtc.crew.cabin import CabinSettings
 
     c = cfg.cabin
-    return CabinSettings(crew=c.crew, announcements=c.announcements, safety_demo=c.safety_demo, service=c.service,
+    return CabinSettings(crew=c.crew, incidents=c.incidents, announcements=c.announcements, safety_demo=c.safety_demo, service=c.service,
                          chime=c.chime, boarding_music=c.boarding_music,
                          english_too=c.english_too, interphone=c.interphone, captain=c.captain)
 
@@ -1080,8 +1107,11 @@ def _airline_name(engine) -> str:
     callsign = engine.state.flight.callsign
     if callsign is None:
         return ""
-    known = airline_of(callsign.ident)[1]
-    return known.name if known is not None else (callsign.telephony if callsign.is_airline else "")
+    code, known = airline_of(callsign.ident)
+    # Every name GSX's handlers might go by: the airline's, the callsign's word, its ICAO and IATA codes
+    names = [known.name if known is not None else "", callsign.telephony if callsign.is_airline else "",
+             callsign.ident[:3] if callsign.is_airline else "", getattr(known, "iata", "") if known is not None else ""]
+    return "|".join(dict.fromkeys(n for n in names if n))
 
 
 def copilot_locale(personality: str, language_code: str) -> str:

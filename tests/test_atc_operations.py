@@ -279,6 +279,7 @@ def test_the_next_climb_comes_before_the_level_is_reached():
     engine = engine_at_kbfi()
     st = engine.state
     st.comms.tuned, st.assignments.altitude_ft, st.assignments.cruise_ft = CENTER, 17000, 40000
+    engine._checked_in.add(CENTER.station)  # (checked in: a climb isn't given before)
     far = _own(engine, 10.0, on_ground=False, alt=13000.0)
     assert engine._climb_due(far) is None  # 4,000 ft to go
     near = _own(engine, 20.0, on_ground=False, alt=14500.0)
@@ -323,6 +324,31 @@ def test_a_shortcut_is_never_to_the_destination_or_into_the_filed_star():
     assert engine._shortcut(own, CENTER)
     fix = engine._scheduled[-1].slots["fix"]
     assert fix in ("CHRLY", "DELTA") and engine._scheduled[-1].instruction_id == "common.direct"
+
+
+def test_turned_back_in_the_cruise_no_direct_to_a_fix_behind_and_asked_for_intentions():
+    """An A350's autopilot went over the Atlantic and it flew back west: the centres gave "direct EBMOS" and "direct
+    MOBUB", the route's first fixes, and never asked what it was doing."""
+    from localtc.atc_core.route import RouteFix
+
+    engine = engine_at_kbfi()
+    engine.state.flight.destination = "KBFI"
+    engine.route = type(engine.route)((
+        RouteFix("ALPHA", 45.0, -122.0, via="DCT"), RouteFix("BRAVO", 46.0, -118.0, via="DCT"),
+        RouteFix("CHRLY", 47.0, -114.0, via="DCT"), RouteFix("DELTA", 48.0, -110.0, via="DCT")))
+    engine.state.phase = "CRUISE"
+    engine._checked_in.add(CENTER.station)
+    east = _own(engine, 50.0, lat=46.6, lon=-115.5, hdg_true=70.0, on_ground=False, alt=36000.0)
+    engine.state.aircraft = east
+    points = engine._route_points()
+    assert points[engine._next_fix(east, points)][0] == "CHRLY"
+    back = _own(engine, 60.0, lat=46.5, lon=-117.0, hdg_true=250.0, on_ground=False, alt=36000.0)
+    assert points[engine._next_fix(back, points)][0] != "ALPHA"  # turned round: ALPHA is ahead, but long flown
+    off = _own(engine, 70.0, lat=48.5, lon=-117.0, hdg_true=250.0, on_ground=False, alt=36000.0)  # 100 miles north
+    engine.state.aircraft = off
+    assert engine._off_course(off, CENTER)
+    assert engine._scheduled[-1].instruction_id == "center.off_course"
+    assert not engine._off_course(off, CENTER)  # (not again straight away)
 
 
 def test_approachs_speeds_go_by_the_stars_published_ones():
@@ -379,3 +405,30 @@ def test_a_heading_asked_for_in_the_air_is_given():
                                    text="request a left turn heading 020"), CENTER, 100.0, own)
     item = engine._scheduled[-1]
     assert item.instruction_id == "approach.heading" and item.slots["heading"] == 20 and item.slots["turn"] == "left"
+
+
+def test_a_star_that_doesnt_go_to_the_runway_in_use_is_swapped_for_one_that_does():
+    """Dubai landing 30L: "cleared VUTE3E arrival", an arrival for 12L and 12R only. Given the one from VUTEB to 30L
+    instead, its fixes in the route in place of the filed one's; with none, no STAR at all (vectors)."""
+    from localtc.atc_core.route import RouteFix
+    from localtc.sim_api import ArrivalData, ArrivalLeg, ArrivalProcedure
+
+    def leg(fix, transition, lat):
+        return ArrivalLeg(fix=fix, lat=lat, lon=55.0, transition=transition)
+
+    east = ArrivalProcedure(name="VUTE3E", legs=(leg("VUTEB", "RW12R", 25.6), leg("DB400", "RW12R", 25.5)))
+    west = ArrivalProcedure(name="VUTE3W", legs=(leg("VUTEB", "RW30L", 25.6), leg("DB500", "RW30L", 25.4),
+                                                 leg("DB501", "RW30L", 25.3)))
+    for others, star, fixes in (((east, west), "VUTE3W", ["AMBOV", "VUTEB", "DB500", "DB501", "OMDB"]),
+                                ((east,), "", ["AMBOV", "VUTEB", "OMDB"])):
+        engine = engine_at_kbfi()
+        engine.cfg.star = "VUTE3E"
+        engine.state.flight.destination = "OMDB"
+        engine.route = type(engine.route)((RouteFix("AMBOV", 25.8, 54.5, via="P559"), RouteFix("VUTEB", 25.6, 54.86, via="P559"),
+                                           RouteFix("DB400", 25.5, 55.0, via="VUTE3E"), RouteFix("OMDB", 25.25, 55.36, via="VUTE3E")))
+        engine.handle(ArrivalData(t=0.0, airport="OMDB", name="VUTE3E", legs=east.legs, others=others))
+        engine._star_for_runway("12R")
+        assert engine.cfg.star == "VUTE3E"  # it goes to 12R: kept
+        engine._star_for_runway("30L")
+        assert engine.cfg.star == star
+        assert [f.ident for f in engine.route.fixes] == fixes

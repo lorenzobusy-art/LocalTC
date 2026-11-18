@@ -23,8 +23,12 @@ GB = {"F": ("bf_emma", "bf_isabella", "bf_emma+bf_isabella", "bf_isabella+bf_ali
       "M": ("bm_george", "bm_fable", "bm_george+bm_fable", "bm_fable+bm_lewis", "bm_george+bm_daniel", "bm_lewis")}
 
 # Continental Europe without a Kokoro voice of its own: its Romance voices and the British, blended.
-EUROPE = {"F": ("ff_siwis+if_sara", "bf_isabella+ff_siwis", "if_sara+bf_emma", "ef_dora+bf_isabella"),
-          "M": ("em_alex+bm_george", "bm_george+em_alex", "pm_alex+bm_george", "em_alex+bm_fable")}
+# (Four men's voices were too few: at Zurich the purser, ground and two other crews all had em_alex+bm_george.)
+EUROPE = {"F": ("ff_siwis+if_sara", "bf_isabella+ff_siwis", "if_sara+bf_emma", "ef_dora+bf_isabella", "bf_emma+ff_siwis",
+                "if_sara+bf_alice", "ff_siwis+bf_lily"),
+          "M": ("em_alex+bm_george", "bm_george+em_alex", "pm_alex+bm_george", "em_alex+bm_fable", "bm_lewis+em_alex",
+                "im_nicola+bm_george", "em_alex+bm_daniel", "bm_daniel+pm_alex", "em_santa+bm_fable",
+                "bm_fable+im_nicola", "pm_santa+bm_lewis")}
 # Kokoro's Mandarin voices speak English with an accent of their own, its women's hard to follow through the radio
 # alone (Whisper lost a third of the words, xiaoyi more): blended with an English voice they keep their timbre and come
 # through (a fifth or less).
@@ -60,7 +64,11 @@ VOICES: dict[str, dict[str, tuple[str, ...]]] = {
     "it": {"F": ("if_sara", "if_sara+ef_dora", "if_sara+ff_siwis"), "M": ("im_nicola", "im_nicola+em_alex",
                                                                          "im_nicola+pm_alex")},
     "tr": MIDDLE_EAST, "me": MIDDLE_EAST, "fa": MIDDLE_EAST, "il": EUROPE,
-    "zh": CHINESE, "ja": JAPANESE, "ko": EAST_ASIAN, "sea": SOUTHEAST_ASIAN, "id": SOUTHEAST_ASIAN,
+    "zh": CHINESE, "ja": JAPANESE, "ko": EAST_ASIAN, "sea": SOUTHEAST_ASIAN, "th": SOUTHEAST_ASIAN, "id": SOUTHEAST_ASIAN,
+    # (Three men's voices for San Juan's four stations: Control and Ground were the same man.)
+    "carib": {"F": ("ef_dora", "ef_dora+af_kore", "ef_dora+pf_dora", "ef_dora+af_heart", "pf_dora+af_bella"),
+              "M": ("em_alex", "em_santa+am_michael", "em_alex+pm_santa", "em_santa", "em_alex+am_eric",
+                    "pm_santa+am_puck", "em_alex+am_onyx")},
 }
 
 # The copilot in your language, by Kokoro: its voices for that language and espeak's name for it (others: Piper).
@@ -96,7 +104,8 @@ SAMPLES: dict[str, tuple[str, str, str]] = {
     "tr": ("Istanbul Tower", "tr-TR", "Turkish one niner"), "me": ("Dubai Tower", "ar-AE", "Emirates two zero one"),
     "fa": ("Tehran Tower", "fa-IR", "Iran Air seven one"), "il": ("Ben Gurion Tower", "he-IL", "El Al zero one"),
     "zh": ("Beijing Tower", "zh-CN", "Air China niner eight one"), "ja": ("Haneda Tower", "ja-JP", "Japan Air one one"),
-    "ko": ("Incheon Tower", "ko-KR", "Korean Air zero one seven"), "sea": ("Suvarnabhumi Tower", "th-TH", "Thai six one five"),
+    "ko": ("Incheon Tower", "ko-KR", "Korean Air zero one seven"), "sea": ("Noi Bai Tower", "vi-VN", "Vietnam Airlines two five four"),
+    "th": ("Suvarnabhumi Tower", "th-TH", "Thai six one five"), "carib": ("San Juan Tower", "es-PR", "JetBlue one five one"),
     "id": ("Soekarno-Hatta Tower", "id-ID", "Garuda eight seven"),
 }
 

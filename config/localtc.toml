@@ -34,7 +34,7 @@ seed = 0                      # 0 = derived from callsign + date (squawk, ATIS l
 center_name = "Seattle"       # hidden: the first centre after departure, when no airport lists a CENTER
 center_mhz = 125.1            # frequency. Enroute, centres are named after the region flown over.
 strict_callsign = false       # true: a readback without the callsign is incomplete
-transition_ft = 0             # 0: the region's (18,000 ft in North America, 3,000-6,000 in Europe); or flight levels at or above this everywhere
+transition_ft = 0             # 0 = the region's (18,000 ft in North America, the country's elsewhere); or this everywhere
 unscripted = true             # ATC starts things too: traffic calls, altitude checks, "how do you read?"
 notams = true                 # notices on the ATIS (a taxiway closed, an ILS out, birds ...); ATC works to them
 atis_source = "hybrid"        # the ATIS: "hybrid" (or "real", the same: the real ATIS, the FAA's in the US and ATIS.guru's
@@ -45,6 +45,8 @@ chatter = true                # other flights heard on the frequency now and the
 enforce_fpln_runways = false  # true: ATC gives the flight plan's runways; false: the runways in use (ATIS, else wind), and a SID from that runway
 real_gates = true             # gates by their real names (E9), international flights to international gates: from OpenStreetMap, cached
 traffic_runways = true        # the runway in use goes the way the sim's AI traffic takes off and lands (wind allowing)
+online_integration = false    # VATSIM/IVAO hybrid: false is LocalTC's ATC alone. true: the ATC tab has Only LocalTC, VATSIM hybrid or IVAO hybrid
+online_network = "local"      # which of them: local, vatsim or ivao (Only LocalTC until another is picked)
 radio_range = true            # an airport's frequencies reach only so far: tower 20-60 nm, ground a few miles
 spoken_callsigns = {}         # how ATC says a callsign, by ident: { VND1128 = "ita arrow 1128" } (the ATC tab's "Said as")
 callsign_check = true         # another flight's callsign heard: "station calling, say again your callsign"
@@ -158,6 +160,10 @@ checklists = "offer"          # the checklists (the aircraft's own, else its fam
                               # each when it's due, "run" it straight away, "off" only when you ask for one
 checklist_mode = "challenge"  # challenge (it asks, you answer) | read (it reads and checks) | auto (it also sets what it can)
 
+[turnaround]                  # the turnaround as a timeline, against the plan's off-block time
+mode = "realistic"            # off | advisory (times, reasons, reminders) | realistic (services keep to their slots too)
+profile = "auto"              # auto (from the airline) | full_service | low_cost | regional | cargo
+
 [ground]                      # the ground crew: the turnaround and the push by voice, through GSX where it's installed
 enabled = false
 verbosity = "standard"        # what they say by themselves: quiet | standard | chatty
@@ -168,6 +174,7 @@ adapter = "auto"              # auto | gsx | standalone | mock (a stand-in, for 
 
 [cabin]                       # the cabin crew: announcements, the safety demo, the service, and "cabin, ..." on the intercom
 enabled = false               # only on an airline's flight or in an airliner
+incidents = "off"             # problems in the cabin for you to decide on: off | rare | normal | frequent
 crew = "auto"                 # who leads the cabin: claire | jamie | grace | daniel | sophie | auto (a different one each flight)
 announcements = true          # boarding, the welcome, the seatbelt sign, the descent, the arrival
 safety_demo = true

@@ -517,15 +517,26 @@ class WatchMixin:
     def _watch_apu(self: Any, own: OwnshipState, t: float) -> None:
         """Taxiing in, near the gate: the APU started, then its bleed on once it's running (the cabin kept cool when
         the engines go off at the stand). Watched: one that hasn't come up is said."""
-        from localtc.crew.actions import APU_RUNNING
+        from localtc.crew.actions import APU_RUNNING, APU_STUCK_S
         from localtc.crew.commands import Command
 
         s = self.c.systems
         if s is not None and s.apu_pct > 0:
             self.f.said["apu_seen"] = t  # the aircraft shows its APU (the FSLabs A321's reads 0 whatever it's doing)
+        if s is not None and s.apu_pct >= APU_RUNNING and self.phase == "CRUISE" and not own.on_ground:
+            # Running all through the cruise: a reading stuck at 100% (the iniBuilds A330's, from the gate to the gate),
+            # not an APU. "APU's running" was said at the gate with it off.
+            since = self.f.said.setdefault("apu_in_cruise", t)
+            if t - since >= APU_STUCK_S:
+                self.f.said.setdefault("apu_stuck", t)
+        elif self.phase == "CRUISE":
+            self.f.said.pop("apu_in_cruise", None)
         if self.phase != "TAXI_IN" or not own.on_ground or not self.hands or "apu" in self.c.dead:
             return
-        running = s is not None and s.apu_pct >= APU_RUNNING
+        stuck = self._said("apu_stuck")
+        if stuck:
+            self.f.said.pop("apu_seen", None)  # as good as an aircraft that never shows it
+        running = s is not None and s.apu_pct >= APU_RUNNING and not stuck
         if not self._said("apu_start"):
             # Coming up to the gate: with one given, as it's close; without, as the aircraft nears the stands. Never
             # on a timer from the landing (it started a minute and a half after touchdown, nowhere near the gate).
@@ -549,7 +560,8 @@ class WatchMixin:
         elif t - self.f.said["apu_start"] > APU_START_S and not self._said("apu_seen"):
             # An aircraft that never shows its APU: up by now, as far as anyone can tell from here ("APU hasn't come
             # up" was said with it running)
-            self._call("apu_bleed", ROUTINE, t, "APU should be up. APU bleed on.", commands=(Command("apu_bleed", "on"),))
+            self._call("apu_bleed", ROUTINE, t, "APU should be up, I can't read it on this one. APU bleed on." if stuck
+                       else "APU should be up. APU bleed on.", commands=(Command("apu_bleed", "on"),))
         elif t - self.f.said["apu_start"] > APU_START_S:
             self.f.said["apu_bleed"] = t
             self._call("apu_slow", ROUTINE, t, "APU hasn't come up. Check it, the bleed's off for now.")
@@ -567,7 +579,10 @@ class WatchMixin:
             self.hdg_hist.popleft()
         path = getattr(self.engine, "_taxi_path", None)
         st = self.engine.state if self.engine is not None else None
-        if path is None or st is None or not own.on_ground or self.phase not in ("TAXI_OUT", "TAXI_IN") or own.on_runway:
+        if path is None or st is None or not own.on_ground or self.phase not in ("TAXI_OUT", "TAXI_IN") or own.on_runway \
+                or (self.phase == "TAXI_OUT" and ("takeoff" in st.clearances or "line_up" in st.clearances)):
+            # (Lined up or cleared for takeoff: off the route onto the runway is where it's going. Fiumicino's line-up
+            # got "We're off the taxi route, cleared via M S H BT B A AA".)
             self.taxi_off_since = None
             return
         here = st.flight.destination if self.phase == "TAXI_IN" else st.flight.origin
@@ -585,7 +600,7 @@ class WatchMixin:
             self.taxi_off_since = None
             return
         cleared = [w for w in (st.assignments.taxi_route or ()) if w]
-        via = f", cleared via {' '.join(cleared)}" if cleared else ""
+        via = f", cleared via {', '.join(speech.taxiway(w).title() for w in cleared)}" if cleared else ""
         if d > TAXI_OFF_M:
             self.taxi_off_since = self.taxi_off_since if self.taxi_off_since is not None else t
             if t - self.taxi_off_since >= TAXI_OFF_S:
@@ -647,7 +662,7 @@ class WatchMixin:
         if w is not None:  # only an airport's own observation; one borrowed from somewhere else isn't its weather
             bad = []
             if w.visibility_sm is not None and w.visibility_sm < 3:
-                bad.append(f"visibility {w.visibility_sm:g} miles")
+                bad.append(f"visibility {visibility_words(w.visibility_sm, d.icao)}")
             if w.ceiling_ft is not None and w.ceiling_ft < 1000:
                 bad.append(f"ceiling {w.ceiling_ft:,} feet")
             parts.append(", ".join(bad) if bad else "weather good")
@@ -684,7 +699,7 @@ class WatchMixin:
             info = self._atis(icao) if icao else None
             if info is None:
                 continue
-            hazards = _hazards(info.weather)
+            hazards = _hazards(info.weather, icao)
             key = (info.letter, *hazards)
             if self.weather_said.get(icao) == key:
                 continue
@@ -703,13 +718,20 @@ class WatchMixin:
         return Offer(kind, value, until)
 
 
-def _hazards(w: Any) -> tuple[str, ...]:
+def visibility_words(miles: float, icao: str = "") -> str:
+    """A visibility as the place reports it: miles in North America, metres elsewhere (Lisbon's "2.49 miles" was 4,000 m)."""
+    if icao[:1] in ("K", "C", "P", ""):
+        return f"{miles:g} miles"
+    return f"{round(miles * 1609.34, -2):,.0f} metres"
+
+
+def _hazards(w: Any, icao: str = "") -> tuple[str, ...]:
     """What in a weather report a crew plans around: gusts, low visibility, a low ceiling, freezing precipitation."""
     out = []
     if w.gust_kt and w.gust_kt >= 20:
         out.append(f"gusting {w.gust_kt}")
     if w.visibility_sm is not None and w.visibility_sm < 3:
-        out.append(f"visibility {w.visibility_sm:g} miles" if w.visibility_sm >= 1 else "low visibility")
+        out.append(f"visibility {visibility_words(w.visibility_sm, icao)}" if w.visibility_sm >= 1 else "low visibility")
     if w.ceiling_ft is not None and w.ceiling_ft < 1000:
         out.append(f"ceiling {w.ceiling_ft:,} feet")
     if w.precip and w.temperature_c is not None and w.temperature_c <= 2:

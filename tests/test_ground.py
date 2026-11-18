@@ -402,7 +402,7 @@ def test_door_messages_are_passed_on_not_repeated_and_not_over_atc():
     c = crew()
     c.atc_until = 5.0
     assert not said(c.update(state_with(c, message="Waiting for your action: open R4"), 0.0))  # ATC's talking
-    assert any("open R4" in s for s in said(c.tick(6.0)))
+    assert any("open the R4 door" in s for s in said(c.tick(6.0)))
     c.update(state_with(c, message=""), 7.0)
     c.update(state_with(c, message="Waiting for your action: open R4"), 8.0)
     assert not said(c.tick(15.0))  # (GSX repeats itself every 15 seconds)
@@ -532,13 +532,19 @@ def test_the_headsets_calls_in_order_following_the_aircraft():
     assert any("right" in s and "hand signal" in s for s in said(out)) and c._push is None
 
 
-def test_a_good_start_is_asked_and_answered_by_the_pilot():
-    """ "Confirm good engine start?", even with the engines running, and GSX told on the pilot's word ("yes" too)."""
+def test_a_good_start_is_put_in_with_the_engines_running_and_asked_without():
+    """The engines running: GSX's "Confirm good engine start" put in by the headset, who sees them. Not running (or not
+    read): asked, and GSX told on the pilot's word ("yes" too)."""
     question = Menu("Confirm Good Engine Start", ("Good Engine Start", "Complete without waiting", "Abort service"))
     c = crew()
     c.heard("pushback, nose left", 0.0)
     c.tick(0.0)
     c.own = own(engines=True)
+    out = c.update(state_with(c, services=services(Departure="completing"), menu=question), 1.0)
+    assert Pick(0, "Good Engine Start") in out and any("good start" in s.lower() for s in said(out))
+    c = crew()
+    c.heard("pushback, nose left", 0.0)
+    c.tick(0.0)
     out = c.update(state_with(c, services=services(Departure="completing"), menu=question), 1.0)
     assert not any(isinstance(o, Pick) for o in out) and any("good engine start" in s.lower() for s in said(out))
     assert Pick(0, "Good Engine Start") in c.heard("yes", 2.0)
@@ -745,6 +751,8 @@ class FakeServer:
     def __init__(self):
         self.commands, self.writers, self.subscribed = [], [], asyncio.Event()
         self.answer: dict[str, dict] = {}
+        self.hello = FIXTURE["hello"]
+        self.extra: dict = {}  # more of the snapshot
 
     async def __aenter__(self):
         self.server = await asyncio.start_server(self.client, "127.0.0.1", 0)
@@ -771,7 +779,7 @@ class FakeServer:
         key = next(line.split(b":")[1].strip() for line in head.split(b"\r\n") if line.lower().startswith(b"sec-websocket-key"))
         accept = base64.b64encode(hashlib.sha1(key + GUID).digest())
         writer.write(b"HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: " + accept + b"\r\n\r\n")
-        self.send(writer, FIXTURE["hello"])
+        self.send(writer, self.hello)
         try:
             while True:
                 first, second = await reader.readexactly(2)
@@ -787,7 +795,7 @@ class FakeServer:
                 if message["type"] == "subscribe":
                     self.subscribed.set()
                     payload = json.dumps({"v": 1, "type": "snapshot", "state": 5, "parking": "Gate B 37", "airport": {"icao": "LSZH"},
-                                          "services": FIXTURE["services"], "menuShown": False, "menu": {"title": "", "entries": []}}).encode()
+                                          "services": FIXTURE["services"], "menuShown": False, "menu": {"title": "", "entries": []}, **self.extra}).encode()
                     writer.write(self.frame(1, payload[:10], final=False) + self.frame(9, b"hi") + self.frame(0, payload[10:]))
                 elif message["type"] == "command":
                     self.commands.append(message)
@@ -941,11 +949,10 @@ def test_the_push_on_the_stand_in_waits_goes_and_closes_out():
         c.own = own(brake=True, engines=True)
         await _drive(service, clock, 3)
         heard_all += " " + " ".join(lines(heard))
-        assert ("pick", "Good Engine Start") not in gsx.sent and "good engine start" in heard_all.lower()
-        await service._out(c.heard("good start", clock.t))
+        assert ("pick", "Good Engine Start") in gsx.sent and "good start" in heard_all.lower()  # the engines seen running
         await _drive(service, clock, 3)
-        assert ("pick", "Good Engine Start") in gsx.sent
-        assert "hand signal" in " ".join(lines(heard)) and c._push is None
+        heard_all += " " + " ".join(lines(heard))
+        assert "hand signal" in heard_all and c._push is None
     run(scenario())
 
 
@@ -1347,12 +1354,31 @@ def test_until_left_is_tail_left():
     assert [a.direction for a in asks if a.action == g.PUSH] == [g.NOSE_RIGHT]
 
 
+def test_the_tug_is_wanted_once_the_push_is_called():
+    """GSX's "attach pushback tug?" is "no" while boarding, "yes" once the push is called: answered no, an A350 sat at
+    Montreal's gate nine minutes until the pilot pushed by hand in GSX."""
+    crew = _push_crew()
+    crew.observe(_own())
+    out = crew.update(_gsx_state(menu=Menu("Attach pushback tug?", ("Yes", "No [GSX choice]"), (False, False))), 1.0)
+    assert Pick(0, "Yes") in out
+
+
+def test_interrupt_pushback_opened_by_the_pilot_is_left_to_them():
+    """The pilot's own look at GSX's menu mid-push isn't shut on them (it was, every few seconds, at Miami)."""
+    crew = _push_crew()
+    crew.observe(_own(brake=False))
+    out = crew.update(_gsx_state(menu=Menu("Interrupt pushback?", ("Yes", "No", "Cameras"), (False, False, False))), 1.0)
+    assert not [o for o in out if isinstance(o, Close)]
+    assert not [o for o in out if hasattr(o, "text") and "Interrupt" in o.text]
+
+
 def test_interrupt_pushback_is_put_away_not_read_out():
     from localtc.ground.api import Menu
     from localtc.ground.crew import Close
 
     crew = _push_crew()
     crew.observe(_own(brake=False))
+    crew._engine_open_t = 0.5  # the crew opened the menu itself, for the good start
     out = crew.update(_gsx_state(menu=Menu("Interrupt pushback?", ("Yes", "No", "Cameras"), (False, False, False))), 1.0)
     assert any(isinstance(o, Close) for o in out)
     assert not [o for o in out if hasattr(o, "text") and "Interrupt" in o.text]
@@ -1458,3 +1484,166 @@ def test_disengage_the_jetway_takes_it_away_and_a_push_is_always_answered():
     c = crew()
     c.own = own()
     assert said(c.heard("pushback please", 0.0))
+
+
+# --- a newer GSX: what its hello lists is what's used -----------------------------------------------------------------
+
+NEWER = {"v": 1, "type": "hello", "protocol": 1, "gsxRunning": True,
+         "capabilities": ["state", "services", "menu", "prompts", "billing", "settings", "handlerData", "handlerSet", "gate"]}
+DENSITY = {"tabs": [{"id": "timings", "subtabs": [{"id": "timings", "fields": [
+    {"type": "choice", "key": "pax_density", "value": 1, "choices": [[0, "Sparse"], [1, "Normal"], [4, "Insane"]]}]}]}]}
+PARKINGS = {"airport": {"parkings": [{"uiGateName": "Gate G 13"}, {"uiGateName": "Gate G 14"}, {"uiGateName": "Parking 992"},
+                                     {"uiGateName": "Gate H 2"}, {"uiGateName": "Stand H 2"}]}}
+
+
+def test_a_stand_is_said_as_gsx_names_it():
+    from localtc.ground.gsx_remote import parking_token
+
+    assert parking_token("G13", PARKINGS) == "Gate G 13"
+    assert parking_token("Gate G 14", PARKINGS) == "Gate G 14"
+    assert parking_token("Z9", PARKINGS) == "Z9"  # not on its list: GSX's own search answers
+    assert parking_token("H2", PARKINGS) == "H2"  # two fit: not guessed
+    assert parking_token("G13", None) == "G13"  # no list (not loaded yet)
+
+
+def test_gate_select_with_a_newer_gsx():
+    async def scenario():
+        async with FakeServer() as server:
+            server.hello, server.extra = NEWER, {"handlerData": PARKINGS}
+            gsx = GsxRemote(port_of=lambda: server.port, retry_s=0.05)
+            await gsx.start(lambda: None)
+            assert await _until(lambda: gsx.state.parking == "Gate B 37")
+            assert "gate" in gsx.state.capabilities and "settings" in gsx.state.capabilities
+            assert (await gsx.select_gate("G13")).ok
+            assert server.commands[-1]["args"] == {"gate": "Gate G 13", "revokeServices": False, "force": False}
+            # already there comes as a refusal, and is nothing wrong
+            server.answer["gate.select"] = {"ok": False, "error": {"code": "already_parked", "message": ""}}
+            assert (await gsx.select_gate("G13")).ok
+            # services running at a stand are never revoked
+            server.answer["gate.select"] = {"ok": False, "error": {"code": "services_active", "message": ""}}
+            result = await gsx.select_gate("G14")
+            assert not result.ok and result.code == "services_active" and not server.commands[-1]["args"]["revokeServices"]
+            # an AI aircraft on it: asked again with force
+            server.answer["gate.select"] = {"ok": False, "error": {"code": "assigned_to_other", "message": ""}}
+            n = len(server.commands)
+            await gsx.select_gate("G14")
+            assert len(server.commands) == n + 2 and server.commands[-1]["args"]["force"] is True
+            await gsx.stop()
+    run(scenario())
+
+
+def test_a_hurry_is_gsxs_density_and_is_put_back(tmp_path):
+    async def scenario():
+        paces = tmp_path / "paces.json"
+        async with FakeServer() as server:
+            server.hello = NEWER
+            server.answer["settings.get"] = {"ok": True, "payload": {"settings": DENSITY}}
+            gsx = GsxRemote(port_of=lambda: server.port, retry_s=0.05, paces_file=paces)
+            await gsx.start(lambda: None)
+            assert await _until(lambda: gsx.state.parking == "Gate B 37")
+            assert (await gsx.speed_up("Boarding")).ok
+            assert server.commands[-1]["verb"] == "settings.set" and server.commands[-1]["args"] == {"key": "pax_density", "value": 4}
+            assert json.loads(paces.read_text()) == {"pax_density": 1}  # noted before the change
+            assert (await gsx.slow_down("Boarding")).ok
+            assert server.commands[-1]["args"] == {"key": "pax_density", "value": 1} and not paces.exists()
+            # nothing changed, nothing to put back
+            n = len(server.commands)
+            assert (await gsx.slow_down("Boarding")).ok and len(server.commands) == n
+            # a build whose settings haven't got it just says no
+            server.answer["settings.get"] = {"ok": True, "payload": {"settings": {"tabs": []}}}
+            result = await gsx.speed_up("Boarding")
+            assert not result.ok and result.code == "no_setting"
+            await gsx.stop()
+    run(scenario())
+
+
+def test_a_hurry_left_behind_by_the_last_run_is_put_back(tmp_path):
+    async def scenario():
+        paces = tmp_path / "paces.json"
+        paces.write_text('{"pax_density": 1}')
+        async with FakeServer() as server:
+            server.hello = NEWER
+            gsx = GsxRemote(port_of=lambda: server.port, retry_s=0.05, paces_file=paces)
+            await gsx.start(lambda: None)
+            assert await _until(lambda: not paces.exists())
+            assert server.commands[-1]["args"] == {"key": "pax_density", "value": 1}
+            await gsx.stop()
+    run(scenario())
+
+
+def test_an_older_gsx_is_never_asked_for_its_newer_verbs():
+    async def scenario():
+        async with FakeServer() as server:
+            gsx = GsxRemote(port_of=lambda: server.port, retry_s=0.05)
+            await gsx.start(lambda: None)
+            assert await _until(lambda: gsx.state.parking == "Gate B 37")
+            result = await gsx.speed_up("Boarding")
+            assert not result.ok and result.code == "no_setting" and not server.commands
+            await gsx.stop()
+    run(scenario())
+
+
+def test_the_crew_hurry_with_a_newer_gsx_and_offer_to_finish_with_an_older_one():
+    from localtc.ground.crew import SlowDown, SpeedUp
+
+    older = crew()
+    older.state = state_with(older, services=services(Boarding="performing"))
+    assert any("finish" in s.lower() or "wrap" in s.lower() for s in said(older.heard("speed up boarding", 0.0)))
+
+    newer = crew()
+    newer.state = msgspec_free_replace(state_with(newer, services=services(Boarding="performing")), frozenset(("gate", "settings")))
+    asked = newer.heard("speed up boarding", 0.0)
+    assert [type(o) for o in asked] == [SpeedUp] and asked[0].service == "Boarding"
+    assert said(newer.hurried("Boarding", True, 1.0))
+    assert not [o for o in newer.tick(2.0) if isinstance(o, SlowDown)]
+    assert said(newer.heard("speed up boarding", 3.0))  # already hurrying: said so, not asked twice
+    newer.state = msgspec_free_replace(state_with(newer, services=services(Boarding="completed")), frozenset(("gate", "settings")))
+    assert [o for o in newer.tick(4.0) if isinstance(o, SlowDown)] == [SlowDown("Boarding")]
+    assert not [o for o in newer.tick(5.0) if isinstance(o, SlowDown)]
+
+    refused = crew()
+    refused.state = msgspec_free_replace(state_with(refused, services=services(Boarding="performing")), frozenset(("settings",)))
+    assert any("finish" in s.lower() or "wrap" in s.lower() for s in said(refused.hurried("Boarding", False, 0.0)))
+
+
+def msgspec_free_replace(state, capabilities):
+    import dataclasses
+
+    return dataclasses.replace(state, capabilities=capabilities)
+
+
+def test_the_newer_gsxs_menus_are_still_read():
+    """GSX 4's first two pages as they read after the update (KFLL): every service's row found."""
+    from localtc.ground.api import ADDITIONAL, SERVICES, Menu
+    from localtc.ground.menu import find, is_question, row_of
+
+    top = Menu("Activate Services at KFLL/Ft Lauderdale-Hollywood Intl",
+               ("Request Deboarding", "Request Catering service", "Request Refueling", "Request Boarding",
+                "Prepare for Push-back and Departure", "Operate Jetway", "Operate Stairs", "Additional Services ▶",
+                "Customize this Parking position", "Reposition Aircraft"), (False,) * 10)
+    more = Menu("Additional Services", ("Request GPU", "Request DeIce", "Request Lavatory service", "Request Water service",
+                                        "Request Cleaning service", "Next Page ▶", "↑ Back"), (False,) * 7)
+    assert not is_question(top) and not is_question(more)
+    for service in SERVICES:
+        assert find(more if service in ADDITIONAL else top, row_of(service).words).index is not None, service
+
+
+def test_the_cabin_asking_to_speed_up_boarding_is_the_ramp_speeding_it_up():
+    from localtc.ground.crew import SpeedUp
+
+    newer = crew()
+    newer.state = msgspec_free_replace(state_with(newer, services=services(Boarding="performing")), frozenset(("gate", "settings")))
+    assert newer.hurry_by_cabin("Boarding", 1.0)
+    assert [o for o in newer.tick(2.0) if isinstance(o, SpeedUp)] == [SpeedUp("Boarding")]
+    assert not crew().hurry_by_cabin("Boarding", 1.0)  # nothing under way
+
+
+def test_boarding_asked_for_ahead_of_the_plan_starts_with_the_reason_for_the_cabin():
+    """ "Can we get boarding started?" was refused twice ("catering's still rolling") before it started: the captain's
+    call starts it, and the reason it would have waited is the cabin's to mention."""
+    c = crew()
+    waived = []
+    c.turnaround = type("T", (), {"hold": staticmethod(lambda service, t, ask=True: "Boarding has to wait for catering."),
+                                  "waive": staticmethod(waived.append)})()
+    said = c.called_by_cabin("Boarding", 0.0)
+    assert said == "Boarding has to wait for catering." and c._queue == ["Boarding"] and waived == ["Boarding"]

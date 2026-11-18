@@ -39,6 +39,7 @@ WEATHER_EFC_MIN = 20
 MIN_DELAY_MIN = 4
 CAT3_VIS_SM, NON_PRECISION_VIS_SM, NON_PRECISION_CEILING_FT = 0.1, 1.0, 400
 MAX_HOLDS = 2  # a flight is held no more than this many times
+HOLD_FT_PER_NM = 500.0  # a hold further below than this per mile to its fix can't be got down to
 HOLD_AGAIN_S = 900.0  # out of a hold, not held again for this long (held, let out and held again inside a minute)
 
 
@@ -162,6 +163,8 @@ class HoldsMixin:
         if facility is None or facility.controller not in ("center", "approach") or self._vfr or own.on_ground \
                 or st.pending is not None or "approach" in st.clearances or self._going_around:
             return False
+        if self._vector_leg is not None or getattr(self, "_vectors_named", False):
+            return False  # being vectored already: the downwind's stretched instead (Dubai held a flight on its downwind)
         if t - self._hold_checked_t < HOLD_CHECK_S or self._holds_given >= MAX_HOLDS:
             return False
         if self.hold is not None and self.hold.history and t - self.hold.history[-1][0] < HOLD_AGAIN_S:
@@ -177,7 +180,11 @@ class HoldsMixin:
         why = self._hold_reason(own)
         if why is None:
             return False
-        return self._give_hold(own, facility, why[0], why[1], t)
+        fix = self._hold_fix(own)
+        level = st.assignments.altitude_ft or own.alt_indicated_ft
+        if fix is not None and own.vs_fpm > -300 and own.alt_indicated_ft - level > nm(own.lat, own.lon, fix[1], fix[2]) * HOLD_FT_PER_NM:
+            return False  # still at the cruise level: "hold at COCUN, maintain 3,000" to a flight at FL350 twenty miles from it
+        return self._give_hold(own, facility, why[0], why[1], t, fix=fix)
 
     def _watch_hold(self, own: OwnshipState, facility: "Facility | None") -> bool:
         hold, t = self.hold, own.t
@@ -213,7 +220,8 @@ class HoldsMixin:
                 better = position < hold.position
                 hold.position, hold.delay_min = position, delay_minutes(position)
                 self._ops_changed = True
-                if better and position < hold.last_said_position and t - hold.issued_t >= SEQUENCE_SAY_S:
+                said_t = max(hold.issued_t, getattr(self, "_hold_said_t", -1e9))
+                if better and position < hold.last_said_position and t - said_t >= SEQUENCE_SAY_S:
                     return self._hold_update(own, facility, revise=False)
         elif not still:
             return self._leave_hold(own, facility)  # the weather's up to the minimums, the runway open again
@@ -228,6 +236,7 @@ class HoldsMixin:
             hold.efc_t = t + extra * 60.0
             hold.efc_clock = clock(own.zulu_s, extra * 60.0)
         hold.last_said_position = hold.position
+        self._hold_said_t = t  # (the next no sooner than SEQUENCE_SAY_S: "now number 4", "now number 3" 31 s apart)
         hold.history.append((t, f"number {hold.position}" + (", new EFC" if revise else "")))
         self._ops_changed = True
         slots: dict[str, Any] = {"message": self._hold_message(hold)}

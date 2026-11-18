@@ -119,7 +119,9 @@ def test_each_announcement_chimes_once_before_its_first_language():
 def test_a_crew_of_another_country_has_its_names_and_its_english():
     cabin = CabinCrew(CabinSettings(crew="claire"), lambda: facts("AFR22"))
     person, name, english, sex = cabin.crew()
-    assert english == "fr-FR" and sex == "F" and name in ("Camille", "Chloé", "Élodie", "Manon", "Julie", "Céline")
+    assert english == "fr-FR" and sex == "F" and name == "Claire"  # the one picked stays who was picked
+    person, name, english, _ = CabinCrew(CabinSettings(), lambda: facts("AFR22")).crew()
+    assert english == "fr-FR" and name != person.name  # left to the flight: a name from there
     assert CabinCrew(CabinSettings(crew="claire"), lambda: facts("ACA1")).crew()[1] == "Claire"
 
 
@@ -329,7 +331,7 @@ def test_the_chime_and_the_music_are_the_real_recordings():
     from localtc.dsp.cabin import music_tracks
 
     tracks = music_tracks()
-    assert len(tracks) == 6 and "boarding.ogg" in tracks  # "Airport Lounge" and five more, one a flight
+    assert len(tracks) == 5 and "boarding.ogg" in tracks  # "Airport Lounge" and four more, one a flight
     lengths = {round(len(music := boarding_music(rate, seed=i)) / rate) for i in range(len(tracks))}
     assert len(lengths) == len(tracks) and min(lengths) > 100 and np.max(np.abs(music)) <= 0.51  # each a different one
 

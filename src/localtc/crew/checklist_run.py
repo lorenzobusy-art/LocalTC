@@ -24,7 +24,7 @@ from localtc.crew.commands import Command
 
 MODES = ("challenge", "read", "auto")
 # The items on the copilot's side: answered (and set, when it has the hands) by it, not asked of the captain.
-COPILOT_SIDE = {"seatbelt", "transponder", "altimeter"}
+COPILOT_SIDE = {"seatbelt", "altimeter"}
 SYSTEM_FIELDS = {"LIGHT BEACON": "light_beacon", "LIGHT STROBE": "light_strobe", "LIGHT LANDING": "light_landing",
                  "LIGHT TAXI": "light_taxi", "LIGHT NAV": "light_nav", "CABIN SEATBELTS ALERT SWITCH": "seatbelt",
                  "SPOILERS ARMED": "spoilers_armed", "AUTOPILOT MASTER": "ap_master"}
@@ -106,10 +106,7 @@ def seen(line: Line, c: Cockpit, values: dict[str, str]) -> tuple[str, bool | No
                                        None if want is None else s.spoilers_armed == want)
     if key == "transponder":
         mode = {"alt": "TA/RA", "on": "on", "standby": "standby"}.get(own.xpdr_mode, own.xpdr_mode)
-        r = response.upper()
-        if re.search(r"\bTA\b|TA/RA", r):  # TA or TA/RA: altitude reporting on (just "on" isn't it)
-            return mode, own.xpdr_mode == "alt"
-        return mode, (own.xpdr_mode in ("alt", "on") if re.search(r"\b(?:AUTO|ON)\b", r) else None)
+        return mode, None  # the captain's, on their word (an airliner's panel doesn't always reach the sim's variable)
     if key == "altimeter":
         setting = own.altimeter_setting_inhg if getattr(own, "altimeter_setting_inhg", 0) else own.altimeter_inhg
         std = abs(setting - 29.92) < 0.005
@@ -184,6 +181,9 @@ def _state(line: Line, c: Cockpit) -> str:
     return ", ".join(f"{i} {n}" for i, n in enumerate(names, start=1))
 
 
+ALTIMETER_BY_ITSELF = False  # the copilot sets the altimeter only when asked to
+
+
 def fix_for(line: Line, c: Cockpit, values: dict[str, str]) -> Command | None:
     """What the copilot sends to set a line of its own side that isn't right."""
     key = sense_key(line.challenge)
@@ -191,8 +191,8 @@ def fix_for(line: Line, c: Cockpit, values: dict[str, str]) -> Command | None:
     if key == "seatbelt":
         on = wanted_on(response)
         return Command("seatbelt", "on" if on else "off") if on is not None else None
-    if key == "transponder" and ("TA" in response or "AUTO" in response or "ON" in response):
-        return Command("transponder", "alt")
+    if key == "altimeter" and not ALTIMETER_BY_ITSELF:
+        return None  # read, never set by the copilot (the knobs differ on every aircraft)
     if key == "altimeter":
         wanted = values.get("altimeter", "")
         if wanted.upper() in ("STD", "STANDARD"):

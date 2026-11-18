@@ -198,12 +198,20 @@ def _bare_flight_level(value: int, expected: Any) -> int:
 
 def altitudes(tokens: list[Token], expected: Any = None) -> list[int]:
     found = []
-    starts = _find_phrase(tokens, ("maintain",)) + [  # "climb to 3,200", "descend 3,000"
-        i for word in ("climb", "descend")  # not "climbing 5,000": that's a check-in report
+    starts = _find_phrase(tokens, ("maintain",)) + _find_phrase(tokens, ("maintaining",)) + [
+        i for word in ("climb", "descend", "descent")  # "climb to 3,200", "descend 3,000" (not "climbing 5,000": a check-in)
         for i in _find_phrase(tokens, (word, "to")) + _find_phrase(tokens, (word,))
+    ] + [  # "climbing to 8,000", "descending to 6,000", "down to 4,000": the readback as pilots say it
+        i for phrase in (("climbing", "to"), ("descending", "to"), ("down", "to")) for i in _find_phrase(tokens, phrase)
     ] + [  # VFR limits: "at or below 4,500" (FAA), "not above 3,000 feet" (ICAO)
         i for phrase in (("at", "or", "below"), ("not", "above")) for i in _find_phrase(tokens, phrase)
     ]
+    if expected is not None:
+        # "Descending 6,500", "climbing one two thousand", "out of 4,000 for 8,000": the altitude given, said as
+        # the pilot goes for it. Only that one: "climbing 5,000" is otherwise where the aircraft is.
+        starts += [i for word in ("climbing", "descending", "for") for i in _find_phrase(tokens, (word,))
+                   if _altitude_value(tokens, i) is not None
+                   and _bare_flight_level(_altitude_value(tokens, i), expected) == _int(expected)]
 
     for i in sorted(set(starts)):
         if (value := _altitude_value(tokens, i)) is not None:
@@ -237,10 +245,22 @@ def altitudes(tokens: list[Token], expected: Any = None) -> list[int]:
     return found
 
 
+def _int(value: Any) -> int | None:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
 def cruise_altitudes(tokens: list[Token], expected: Any = None) -> list[int]:
     found = []
-    for i in _find_phrase(tokens, ("expect",)):
+    for i in _find_phrase(tokens, ("expect",)) + _find_phrase(tokens, ("expecting",)):
         if (value := _altitude_value(tokens, i)) is not None:
+            if 100 <= value < 1000 and _int(expected) == value * 100:
+                value = _int(expected)  # "expect 110, 10 minutes after": the hundreds of feet ("11010 minutes")
+            elif 1000 <= value < 10000 and _int(expected) == value * 10 and _int(expected) >= TRANSITION_FT:
+                # "Expect flight level 39 20 minutes after": FL390's zero run into the "two zero" minutes that follow
+                value = _int(expected)
             if (value := _bare_flight_level(value, expected)) not in found:
                 found.append(value)
     return found
@@ -272,6 +292,19 @@ def _dropped_digit(text: str, expected: Any) -> bool:
     return any(want[:i] + want[i + 1:] == heard for i in range(len(want)))
 
 
+def _doubled_digit(text: str, expected: Any) -> bool:
+    """ "120.555" for 120.55: speech-to-text saying one digit of the expected frequency twice ("O'Hare Tower on 120.555"
+    got "switch to 120.55", and the pilot had said it right)."""
+    try:
+        want = f"{float(expected):.3f}".rstrip("0").rstrip(".").replace(".", "")
+    except (TypeError, ValueError):
+        return False
+    heard = text.replace(".", "").replace(",", "")
+    if not heard.isdigit() or len(heard) != len(want) + 1:
+        return False
+    return any(heard[:i] + heard[i + 1:] == want and heard[i] == heard[i - 1] for i in range(1, len(heard)))
+
+
 def _with_to(text: str, expected: Any) -> bool:
     """ "121.02" for 121.0: the frequency and the "to" after it ("121.0 to Montreal Ground") run together; "121.01"
     the same with "one" or "on" ("121.0, on ground, ready")."""
@@ -291,6 +324,8 @@ def frequencies(tokens: list[Token], expected: Any = None) -> list[float]:
             continue
         if expected is not None and _with_to(token.text, expected):
             found.append(float(expected))
+        elif "." in token.text and expected is not None and _doubled_digit(token.text, expected):
+            found.append(float(expected))
         elif (value := _as_frequency(token.text)) is not None:
             found.append(value)
         elif token.text.isdigit() and isinstance(expected, float) and expected == int(token.text):
@@ -304,14 +339,16 @@ def frequencies(tokens: list[Token], expected: Any = None) -> list[float]:
 
 def squawks(tokens: list[Token], expected: Any = None) -> list[str]:
     found = []
-    for i in _find_phrase(tokens, ("squawk",)) + _find_phrase(tokens, ("code",)) + _find_phrase(tokens, ("transponder",)):
+    for i in _find_phrase(tokens, ("squawk",)) + _find_phrase(tokens, ("squawking",)) + _find_phrase(tokens, ("code",)) \
+            + _find_phrase(tokens, ("transponder",)):
         num = _number(tokens, i)
         if num and len(num) == 4 and all(c in "01234567" for c in num):
             found.append(num)
     return found
 
 
-SPEED_WORDS = (("speed",), ("knots",), ("kts",), ("slow",), ("maintain",), ("reduce",), ("increase",))
+SPEED_WORDS = (("speed",), ("knots",), ("knot",), ("kts",), ("slow",), ("maintain",), ("maintaining",), ("reduce",),
+               ("reducing",), ("increase",), ("increasing",), ("slowing",))
 
 
 def speeds(tokens: list[Token], expected: Any = None) -> list[int]:
@@ -400,6 +437,17 @@ def _is_route_token(token: Token, names: frozenset[str] | set[str] = frozenset()
         or (token.kind == "number" and token.text in names)
 
 
+def _article(tokens: list[Token], i: int, names: set[str] | frozenset[str]) -> bool:
+    """An "a" written as a word between taxiways ("K and a H three"), when the route given has no taxiway A or the
+    "a" follows "and"/"then": speech, not a name. Taxiway A is said "alpha" (a letter token)."""
+    token = tokens[i]
+    if token.kind != "word" or token.text not in ("a", "i") or i + 1 >= len(tokens):
+        return False
+    if not _is_route_token(tokens[i + 1], names):
+        return False
+    return token.text not in names or (i > 0 and tokens[i - 1].text in ("and", "then"))
+
+
 def _callsign_letter(tokens: list[Token], i: int) -> bool:
     """ "Delta 2543", "November 172": a letter then a long number is a callsign, not a taxiway."""
     return i + 1 < len(tokens) and tokens[i + 1].kind == "number" and len(tokens[i + 1].text) >= 3
@@ -433,6 +481,9 @@ def _route_at(tokens: list[Token], start: int, names: set[str] | frozenset[str] 
     i = start
     while i < len(tokens):
         token = tokens[i]
+        if filler and route and _article(tokens, i, names):
+            i += 1  # "via K and a H three": the "a" of speech, not taxiway A (that one's "alpha")
+            continue
         if not _is_route_token(token, names) or _callsign_letter(tokens, i):
             if filler and token.kind == "word" and token.text in ROUTE_FILLER and route:
                 i += 1
@@ -706,6 +757,7 @@ def _flight_number_end(tokens: list[Token], start: int, number: str) -> int | No
 
 
 AIRLINE_IDENT = re.compile(r"([A-Z]{3})(\d{1,4}[A-Z]{0,2})")  # VND1128: three letters then the flight number
+VALUE_WORDS = {"runway", "heading", "level", "squawk", "maintain", "speed", "inbound", "radial", "qnh", "altimeter"}
 
 
 def without_callsign(tokens: list[Token], callsign: Callsign | None) -> list[Token]:
@@ -735,7 +787,7 @@ def without_callsign(tokens: list[Token], callsign: Callsign | None) -> list[Tok
         if len(tokens) >= len(letters) and "".join(t.text for t in tokens[-len(letters):]) == letters \
                 and all(t.kind == "letter" for t in tokens[-len(letters):]):
             tokens = tokens[: -len(letters)]
-    best: tuple[int, int] | None = None  # the longest span that spells the callsign; the last one on a tie
+    spans: list[tuple[int, int]] = []
     for first in range(len(tokens)):
         if tokens[first].kind not in ("letter", "number") and len(tokens[first].text) > 2:
             continue
@@ -744,8 +796,13 @@ def without_callsign(tokens: list[Token], callsign: Callsign | None) -> list[Tok
             compact += tokens[last].text.replace(".", "")
             if len(compact) > len(ident):
                 break
-            if compact in forms and (best is None or last - first >= best[1] - best[0]):
-                best = (first, last)
+            if compact in forms:
+                spans.append((first, last))
+    # "Runway 17, 2LT" spells N172LT from the runway's number on: a span that doesn't start with a value's number,
+    # when there's one, then the longest (the last one on a tie).
+    after_value = [s for s in spans if tokens[s[0]].kind == "number" and s[0] > 0 and tokens[s[0] - 1].text in VALUE_WORDS]
+    spans = [s for s in spans if s not in after_value] or spans
+    best = max(spans, key=lambda s: (s[1] - s[0], s[0]), default=None)
     return tokens if best is None else tokens[: best[0]] + tokens[best[1] + 1 :]
 
 
@@ -882,7 +939,10 @@ ELEMENTS: dict[str, Extractor] = {
                                  ("clear", "for", "takeoff"), ("clear", "takeoff"), ("clear", "for", "take", "off"),
                                  ("great", "for", "takeoff"), ("clean", "for", "takeoff"), ("cleat", "for", "takeoff"),
                                  ("cleared", "for", "departure")),
-    "line_up_and_wait": phrase(("line", "up", "and", "wait"), ("line", "up", "wait"), ("lineup", "and", "wait"), ("position", "and", "hold")),
+    "line_up_and_wait": phrase(("line", "up", "and", "wait"), ("line", "up", "wait"), ("lineup", "and", "wait"),
+                               ("lining", "up", "and", "wait"), ("lining", "up", "and", "waiting"),
+                               ("line", "up", "and", "waiting"), ("lining", "up", "wait"), ("lining", "up"),
+                               ("lined", "up", "and", "wait"), ("position", "and", "hold")),
     "cleared_to_land": clearance(("cleared", "to", "land"), ("cleared", "land"), ("clear", "to", "land"), ("cut", "to", "land"),
                               ("great", "to", "land"), ("clean", "to", "land"), ("cleat", "to", "land"), ("clear", "land"),
                               ("cleared", "for", "landing"), ("clear", "for", "landing")),
@@ -954,6 +1014,8 @@ def values_close(element: str, heard: Any, expected: Any, confidence: float | No
         return expected[-1:].isdigit() and heard != expected and heard.rstrip("LRC") == expected  # "08 left" for 08
     if element in ("altitude", "cruise") and int(heard) % 100 != 0 and abs(int(heard) - int(expected)) < 50:
         return True  # "1508" for 1,500
+    if element == "procedure" and procedure_heard_close(str(heard), str(expected)):
+        return True
     if element == "frequency":
         # "121771" for 121.7 ("121.7 when ready" run together): worth a "confirm", not a "negative".
         wanted = _digits(element, expected)
@@ -1051,3 +1113,16 @@ def procedure_matches(heard: str, expected: str) -> bool:
 
 
 PROCEDURE_LIKENESS = 0.6  # how alike two spellings of a procedure's name must be to be the same one
+PROCEDURE_HEARD_CLOSE = 0.35  # ... and with its number and letter, how alike to be a mishearing of it, not another one
+
+
+def procedure_heard_close(heard: str, expected: str) -> bool:
+    """The procedure's number and letter, its name heard in an accent ("Zobuker 1 Golf" for OBOKA1G): no "negative"
+    over it (it's read back for good measure only). Another name altogether ("Dork 7" for HAWKZ7) still is one."""
+    def split(name: str) -> tuple[str, str]:
+        m = re.fullmatch(r"([A-Z]+?)(\d[A-Z]?)", re.sub(r"[^A-Z0-9]", "", name.upper()))
+        return (re.sub(r"(.)\1+", r"\1", m.group(1)), m.group(2)) if m else ("", "")
+
+    (heard_name, heard_end), (name, end) = split(heard), split(expected)
+    return bool(name) and heard_end == end and len(end) == 2 and \
+        difflib.SequenceMatcher(None, heard_name, name).ratio() >= PROCEDURE_HEARD_CLOSE

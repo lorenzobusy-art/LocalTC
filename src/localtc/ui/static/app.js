@@ -182,7 +182,7 @@ function addLine(l) {
     case "crew":  // the copilot, to you
       body = `<span class="who">COPILOT</span><span class="ic">intercom</span><span class="body">${esc(l.text)}</span>`; break;
     case "cabin":  // the cabin crew: an announcement, or to you on the interphone
-      body = `<span class="who">${esc((l.who || "Cabin").toUpperCase())}</span><span class="ic">${l.channel === "pa" ? "PA" : "interphone"}</span><span class="body">${esc(l.text)}</span>`; break;
+      body = `<span class="who">${esc((l.who || "Cabin").toUpperCase())}</span><span class="ic">${l.channel === "pa" ? "PA" : "interphone"}</span><span class="body"${l.summary ? ` title="${esc(l.text)}"` : ""}>${esc(l.summary || l.text)}</span>`; break;
     case "ramp":  // the ground crew: on their frequency, or the headset
       body = `<span class="who">RAMP</span><span class="ic">${l.channel === "radio" ? "radio" : "interphone"}</span><span class="body">${esc(l.text)}</span>`; break;
     case "chatter":  // somebody else on the frequency
@@ -410,17 +410,55 @@ function setFlight(f) {
   markTuned();
 }
 
+/* A logo's white background made see-through, so it sits on the app's own colours: the white joined to the
+   picture's edges goes (flood fill), the white inside the letters stays. */
+function clearWhite(img) {
+  try {
+    const c = document.createElement("canvas"), w = (c.width = img.naturalWidth), h = (c.height = img.naturalHeight);
+    const g = c.getContext("2d");
+    g.drawImage(img, 0, 0);
+    const d = g.getImageData(0, 0, w, h), px = d.data, seen = new Uint8Array(w * h), stack = [];
+    const white = (i) => px[i * 4 + 3] > 0 && px[i * 4] > 235 && px[i * 4 + 1] > 235 && px[i * 4 + 2] > 235;
+    for (let x = 0; x < w; x++) stack.push(x, (h - 1) * w + x);
+    for (let y = 0; y < h; y++) stack.push(y * w, y * w + w - 1);
+    while (stack.length) {
+      const i = stack.pop();
+      if (seen[i]) continue;
+      seen[i] = 1;
+      if (px[i * 4 + 3] > 0) {  // (see-through already: passed through to the white beyond it)
+        if (!white(i)) continue;
+        px[i * 4 + 3] = 0;
+      }
+      const x = i % w, y = (i - x) / w;
+      if (x > 0) stack.push(i - 1);
+      if (x < w - 1) stack.push(i + 1);
+      if (y > 0) stack.push(i - w);
+      if (y < h - 1) stack.push(i + w);
+    }
+    g.putImageData(d, 0, 0);
+    return c.toDataURL("image/png");
+  } catch (e) {
+    return img.src;  // (unreadable: as it came)
+  }
+}
+
 /* En route (``flight.status``): the flight's status in place of the airport box, the airline's logo (else its
    colour), the way along the route, and how it's going. */
 function enRoute(s) {
   $("#airport-box").hidden = !!s;
   $("#status-box").hidden = !s;
+  $("#flight-box").hidden = $('.splitter[data-for="flight-box"]').hidden = !!s;  // (all of it's in the status, or a tab away)
   if (!s) return;
   const logo = $("#er-logo"), badge = $("#er-badge");
   if (logo.dataset.src !== s.logo) {
     logo.dataset.src = s.logo || "";
     logo.hidden = true;
-    if (s.logo) { logo.onload = () => { logo.hidden = false; badge.textContent = ""; }; logo.onerror = () => { logo.hidden = true; }; logo.src = s.logo; }
+    if (s.logo) {
+      const img = new Image();
+      img.onload = () => { logo.src = clearWhite(img); logo.hidden = false; badge.textContent = ""; };
+      img.onerror = () => { logo.hidden = true; };
+      img.src = s.logo;
+    }
   }
   if (logo.hidden) {
     badge.textContent = s.iata || s.airline_icao || "";
@@ -515,21 +553,15 @@ $("#sw-copilot").onclick = async () => {
 
 $("#btn-startstop").onclick = async () => {
   const flying = S.state.status === "running" || S.state.status === "starting";
-  if (!flying && Online.unchosen()) {
-    showTab("atc");
-    toast("Choose Only LocalTC, VATSIM hybrid or IVAO hybrid for this flight first", true);
-    return;
-  }
   try { await api(flying ? "flight/stop" : "flight/start", {}); } catch (e) { fail(e); }
 };
 
 /* ---------- VATSIM/IVAO beside LocalTC ---------- */
 
-// [atc] online_integration on: the ATC tab asks which ATC the flight is flown with (Start waits for it; changed in
-// flight, it applies at once) and says where things stand. Who works what is on the Live Map's frequency table.
+// [atc] online_integration on: the ATC tab has which ATC the flight is flown with (Only LocalTC unless another is
+// chosen; changed in flight, it applies at once) and says where things stand. Who works what is on the Live Map's frequency table.
 const Online = {
   NAMES: { local: "LocalTC", vatsim: "VATSIM", ivao: "IVAO" },
-  unchosen() { const o = S.state?.online; return !!(o && o.integration && !o.network); },
   async choose(network) {
     try {
       await api("settings", { settings: { atc: { online_network: network } } });
@@ -546,12 +578,11 @@ const Online = {
     if (!box) return;
     box.hidden = !(o && o.integration);
     if (box.hidden) return;
-    $$("[data-online]", box).forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.online === o.network)));
+    const network = o.network || "local";
+    $$("[data-online]", box).forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.online === network)));
     const note = $("#online-note");
-    note.classList.toggle("online-note-need", !o.network);
     const net = this.NAMES[o.active] || "";
-    if (!o.network) note.textContent = "Choose one before you start the flight.";
-    else if (o.network === "local") note.textContent = "LocalTC's controllers for the whole flight.";
+    if (network === "local") note.textContent = "LocalTC's controllers for the whole flight.";
     else if (o.active && o.muted) note.textContent = `With ${net}: LocalTC's ATC is quiet.`;
     else if (o.active) note.textContent = o.error ? `${net} not reached: ${o.error}` : `Looking for ${net} controllers each minute.`;
     else if (S.state.status === "running" || S.state.status === "starting") note.textContent = `Looking for ${this.NAMES[o.network]} controllers each minute.`;
@@ -598,14 +629,16 @@ const FreqTable = {
     $$("#map-freqs tr[data-mhz]").forEach((tr) => tr.classList.toggle("fq-now", com1 != null && Math.abs(Number(tr.dataset.mhz) - com1) < 0.004));
   },
 };
-try { if (localStorage.getItem("map-freqs") === "folded") $("#map-freqs").classList.add("folded"); } catch { /* open */ }
+try { $("#map-freqs").classList.toggle("folded", localStorage.getItem("map-freqs") !== "open"); }
+catch { $("#map-freqs").classList.add("folded"); } // folded until it's opened
 
 // The Live Map's box for the taxi the network's ground controller gave (VATSIM / IVAO hybrid only): the runway and the
 // taxiways typed, LocalTC routes along them from where the aircraft is and draws the route as it does its own.
 const TaxiBox = {
   render() {
     const box = $("#map-taxi");
-    if (box) box.hidden = !S.state?.online?.network;
+    const o = S.state?.online;
+    if (box) box.hidden = !(o && o.integration && (o.network === "vatsim" || o.network === "ivao"));
   },
   async send(row) {
     const note = $("#mt-note"), val = (c) => $(c, row).value.trim();
@@ -1307,7 +1340,7 @@ const Setup = {
         <button type="button" class="wcard ${on ? "" : "current"}" data-wcabin="off"><b>No cabin crew</b>
           <span class="muted small">A quiet cabin. You can bring them in any time in Quick Settings.</span></button>
       </div>
-      ${on ? `<p class="small">Who leads the cabin? Their name and accent follow the airline: on Lufthansa, a German crew.</p>
+      ${on ? `<p class="small">Who leads the cabin? Their accent follows the airline: on Lufthansa, a German crew. Auto gives them a local name too.</p>
         <div class="wpeople">${[{ id: "auto", name: "A different one each flight", brief: "One of them, chosen for each flight", sample: "" },
           ...(S.settings.cabin_crew || [])].map((p) => `<div class="wcard person ${p.id === (c.crew || "auto") ? "current" : ""}" data-cabin-person="${esc(p.id)}" role="button" tabindex="0">
           <b translate="no">${esc(p.name)}</b><span class="muted small">${esc(p.brief)}</span>${p.sample ? `<i class="small" translate="no">&ldquo;${esc(p.sample)}&rdquo;</i>
@@ -1441,6 +1474,7 @@ const Flight = {
     $("#plan-save").classList.toggle("primary", this.filing);
     $("#sb-user").value = S.state.simbrief_user || S.settings?.settings?.ui?.simbrief_user || localStorage.getItem("sbUser") || "";
     if (plan && plan.source === "manual") this.fill(plan);
+    this.rules();
     this.fetched = null;
     $("#sb-result").hidden = true;
     this.sub(plan?.source === "manual" ? "manual" : "simbrief");
@@ -1453,6 +1487,15 @@ const Flight = {
     for (const k of ["callsign", "aircraft", "origin", "destination", "alternate", "route"]) $(`#mp-${k}`).value = p[k] || "";
     $("#mp-rules").value = p.rules || "IFR";
     $("#mp-cruise").value = p.cruise_ft || "";
+    this.rules();
+  },
+  /** VFR asks for less: no cruise, alternate or route, and the destination may be blank (a local flight). */
+  rules() {
+    const vfr = $("#mp-rules").value === "VFR";
+    $$("#sub-manual .ifr-only").forEach((el) => { el.hidden = vfr; });
+    $$("#sub-manual .vfr-only").forEach((el) => { el.hidden = !vfr; });
+    $("#mp-destination").required = !vfr;
+    $("#mp-destination").placeholder = vfr ? "blank = a local flight" : "e.g. KBFI";
   },
   sub(name) {
     this.mode = name;
@@ -1508,6 +1551,7 @@ $$(".subtab").forEach((b) => (b.onclick = () => Flight.sub(b.dataset.sub)));
 $("#sb-fetch").onclick = () => Flight.fetch();
 $("#sb-user").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); Flight.fetch(); } });
 $("#plan-save").onclick = () => Flight.save(false);
+$("#mp-rules").onchange = () => Flight.rules();
 $("#plan-start").onclick = () => Flight.save(true);
 
 /* ---------- Dev mode ---------- */
@@ -2171,6 +2215,9 @@ const Settings = {
           ${(S.settings.cabin_crew || []).map((p) =>  // (translate="no": put together here, its manner in the language)
             `<option value="${esc(p.id)}" translate="no" ${st.cabin.crew === p.id ? "selected" : ""}>${esc(p.name)} (${I18n.t(p.sex === "F" ? "she" : "he")}) · ${esc(I18n.t(p.brief))}</option>`).join("")}</select></label>
           <button type="button" class="btn small" id="s-cabin-hear">Hear them</button></div>
+        <div class="row"><label>Cabin incidents<select id="s-cabin-incidents" title="Occasional problems in the cabin for you to decide on, played by the cabin crew. When they come depends on the flight, and a replay has the same ones.">${[
+          ["off", "Off"], ["rare", "Rare"], ["normal", "Normal"], ["frequent", "Frequent"]]
+          .map(([v, t]) => `<option value="${v}" ${(st.cabin.incidents || "off") === v ? "selected" : ""}>${t}</option>`).join("")}</select></label></div>
         <div class="row"><label>How they use the language model<select id="s-cabin-llm" ${this.hasCloud(st) ? "" : "disabled"}>${[
           ["scripted", "Fully scripted: the script's words only"],
           ["semi", "Semi script/LLM: the model answers only what the script can't"],
@@ -2178,7 +2225,7 @@ const Settings = {
           ["llm", "Fully LLM: the model words all they say, except the safety announcements"]]
           .map(([v, t]) => `<option value="${v}" ${(this.hasCloud(st) ? st.cabin.llm : "scripted") === v ? "selected" : ""}>${t}</option>`).join("")}</select></label></div>
         <span class="hint" ${this.hasCloud(st) ? "hidden" : ""}>Needs a cloud language model. Without one, they use the script's words.</span>
-        <span class="hint">Their name and accent follow the airline: on Lufthansa a German crew, on Air France a French one, each announcing in the airline's languages.</span>
+        <span class="hint">Their name and accent follow the airline: on Lufthansa a German crew, on Air France a French one, each announcing in the airline's languages, then in yours (the copilot's language). To you they always talk in yours.</span>
         <div class="row"><label>Your name, for the welcome<input id="s-cabin-captain" value="${esc(st.cabin.captain || "")}" placeholder="Reyes" autocomplete="off" spellcheck="false"></label></div>
         <label class="check-row"><input type="checkbox" id="s-cabin-announcements" ${st.cabin.announcements ? "checked" : ""}> Announcements: boarding, the welcome, the seatbelt sign, the descent and the arrival</label>
         <label class="check-row"><input type="checkbox" id="s-cabin-safety" ${st.cabin.safety_demo ? "checked" : ""}> Safety demonstration during the taxi out, with this aircraft's exits</label>
@@ -2186,7 +2233,7 @@ const Settings = {
         <label class="check-row"><input type="checkbox" id="s-cabin-interphone" ${st.cabin.interphone ? "checked" : ""}> Calls to the flight deck: boarding complete, cabin secure for takeoff and landing</label>
         <label class="check-row"><input type="checkbox" id="s-cabin-chime" ${st.cabin.chime ? "checked" : ""}> Cabin chime: before an announcement, and when the seatbelt sign changes</label>
         <label class="check-row"><input type="checkbox" id="s-cabin-music" ${st.cabin.boarding_music ? "checked" : ""}> Boarding music: quietly in the cabin while people get on and off</label>
-        <span class="hint" translate="no">Music: "Airport Lounge", "Lobby Time", "Local Forecast - Elevator", "Bossa Antigua", "Smooth Lovin", "Easy Lemon", Kevin MacLeod (incompetech.com), licensed under Creative Commons: By Attribution 3.0. Chime: "Airplane Chime Sound Effect" by Sharelk (CC0).</span>
+        <span class="hint" translate="no">Music: "Airport Lounge", "Lobby Time", "Bossa Antigua", "Smooth Lovin", "Easy Lemon", Kevin MacLeod (incompetech.com), licensed under Creative Commons: By Attribution 3.0. Chime: "Airplane Chime Sound Effect" by Sharelk (CC0).</span>
         <label class="check-row"><input type="checkbox" id="s-cabin-log" ${st.cabin.show_log !== false ? "checked" : ""}> Show their words in the radio log</label>
         <label class="check-row"><input type="checkbox" id="s-cabin-english" ${st.cabin.english_too ? "checked" : ""}> Announcements in English too: a crew whose language isn't English repeats each one in English</label>
         </div>
@@ -2216,6 +2263,12 @@ const Settings = {
           ["llm", "Fully LLM: the model reads and words everything, except the push's safety calls"]]
           .map(([v, t]) => `<option value="${v}" ${(this.hasCloud(st) ? st.ground.llm : "scripted") === v ? "selected" : ""}>${t}</option>`).join("")}</select></label></div>
         <span class="hint" ${this.hasCloud(st) ? "hidden" : ""}>Needs a cloud language model. Without one, they understand the grammar's phrases only.</span>
+        <div class="row"><label>Turnaround schedule<select id="s-turn-mode">${[
+          ["off", "Off"], ["advisory", "Times and reminders only"], ["realistic", "Realistic: services keep to their slots"]]
+          .map(([v, t]) => `<option value="${v}" ${(st.turnaround?.mode || "realistic") === v ? "selected" : ""}>${t}</option>`).join("")}</select></label>
+          <label>Airline turnaround profile<select id="s-turn-profile">${[
+          ["auto", "From the airline"], ["full_service", "Full service"], ["low_cost", "Low cost"], ["regional", "Regional"], ["cargo", "Cargo"]]
+          .map(([v, t]) => `<option value="${v}" ${(st.turnaround?.profile || "auto") === v ? "selected" : ""}>${t}</option>`).join("")}</select></label></div>
         <label class="check-row"><input type="checkbox" id="s-ground-clearance" ${st.ground.wait_for_clearance ? "checked" : ""}> Hold the push until ATC has cleared it</label>
         </div>
       </div>
@@ -2499,6 +2552,9 @@ const Settings = {
     on("#s-ground-llm", "change", () => this.save("ground", "llm", val("#s-ground-llm")));
     on("#s-ground-clearance", "change", (e) => this.save("ground", "wait_for_clearance", e.target.checked));
     on("#s-cabin-llm", "change", () => this.save("cabin", "llm", val("#s-cabin-llm")));
+    on("#s-cabin-incidents", "change", () => this.save("cabin", "incidents", val("#s-cabin-incidents")));
+    on("#s-turn-mode", "change", () => this.save("turnaround", "mode", val("#s-turn-mode")));
+    on("#s-turn-profile", "change", () => this.save("turnaround", "profile", val("#s-turn-profile")));
     on("#s-cabin-captain", "change", () => this.save("cabin", "captain", val("#s-cabin-captain").trim()));
     for (const [id, key] of [["#s-cabin-announcements", "announcements"], ["#s-cabin-safety", "safety_demo"],
       ["#s-cabin-service", "service"], ["#s-cabin-interphone", "interphone"], ["#s-cabin-chime", "chime"],
@@ -2517,10 +2573,9 @@ const Settings = {
     on("#s-real-gates", "change", (e) => this.save("atc", "real_gates", e.target.checked));
     on("#s-online", "change", async (e) => {
       if (!(await this.save("atc", "online_integration", e.target.checked))) return;
-      S.state.online = { ...(S.state.online || {}), integration: e.target.checked, ...(e.target.checked ? { network: "" } : {}) };
-      if (S.settings && e.target.checked) S.settings.settings.atc.online_network = "";
+      S.state.online = { ...(S.state.online || {}), integration: e.target.checked, ...(e.target.checked ? { network: "local" } : {}) };
+      if (S.settings && e.target.checked) S.settings.settings.atc.online_network = "local";
       Online.render();
-      if (e.target.checked) toast("Choose Only LocalTC, VATSIM hybrid or IVAO hybrid on the ATC tab before the next flight");
     });
     on("#s-traffic-rwy", "change", (e) => this.save("atc", "traffic_runways", e.target.checked));
     on("#s-range", "change", (e) => this.save("atc", "radio_range", e.target.checked));
@@ -2757,7 +2812,7 @@ const MapView = {
     this.map = L.map("map", { zoomControl: true, attributionControl: true, maxZoom: 19 }).setView([47.9, -122.28], 9);
     this.map.createPane("ground").style.zIndex = 390;  // under the routes, the zones and the aircraft (400 and up)
     this.groundRenderer = L.canvas({ padding: 0.5, pane: "ground" });
-    this.map.on("zoomend", () => this.groundZoom());
+    this.map.on("zoomend", () => { this.groundZoom(); this.declutter(); });
     // atcmap.js: the same legend as the website's Flight Tracker, folded away with its header (who you talk to stays).
     const legend = $("#map-legend");
     legend.innerHTML = `<button type="button" class="lg-fold" aria-expanded="true" title="Show or hide the legend">Legend</button>${AtcMap.LEGEND}`;
@@ -2765,7 +2820,7 @@ const MapView = {
       legend.classList.toggle("folded", folded);
       legend.querySelector(".lg-fold").setAttribute("aria-expanded", String(!folded));
     };
-    try { fold(localStorage.getItem("map-legend") === "folded"); } catch { /* storage unavailable: open */ }
+    try { fold(localStorage.getItem("map-legend") !== "open"); } catch { fold(true); } // folded until it's opened
     legend.querySelector(".lg-fold").onclick = () => {
       const folded = !legend.classList.contains("folded");
       fold(folded);
@@ -2866,6 +2921,7 @@ const MapView = {
     if (!this.opsLayer) return;
     this.opsLayer.clearLayers();
     AtcMap.operations(this.opsLayer, ops);
+    this.declutter();
     const min = ops && ops.minimum_altitude_ft;
     $("#map-mva").textContent = min ? `MIN ALT ${Number(min).toLocaleString()}` : "";
   },
@@ -2934,6 +2990,7 @@ const MapView = {
       { ident: `${arr.runway} final`, lat: arr.final[0], lon: arr.final[1], kind: "wpt" },
       { ident: p.destination, lat: arr.threshold[0], lon: arr.threshold[1], kind: "apt" }] } : p;
     this.route = AtcMap.route(this.routeLayer, shown);
+    this.declutter();
     this.zonesSoon();
     Promise.all([p.origin, p.destination].map((icao) => (icao ? this.airport(icao) : null))).then(([from, to]) => {
       if (!this.route && from && to && this.planKey === key)  // a typed plan: no fixes, a straight line
@@ -2951,6 +3008,7 @@ const MapView = {
     if (!this.map || this.drawnAirports.has(a.icao)) return;
     this.drawnAirports.add(a.icao);
     AtcMap.runways(this.map, a);
+    this.declutter();
     this.layout(a.icao);
   },
   /* An airport's ground, close in: taxiways and runways from zoom 13, their names from 15, the gates' names from 16
@@ -3016,11 +3074,17 @@ const MapView = {
       const code = a.iata || a.icao;
       const size = a.large ? "big" : zoom < 8 ? "small" : "";
       const icon = L.divIcon({ className: `apt-icon ${size}`, iconSize: [12, 12], iconAnchor: [6, 6],
-        html: `<span class="apt-dot"></span><span class="apt-code" translate="no">${esc(code)}</span>` });
+        html: `<span class="apt-dot" data-rank="${a.large ? 40 : 20}"></span><span class="apt-code" translate="no">${esc(code)}</span>` });
       const m = L.marker([a.lat, this.path.lon(a.lon)], { icon, pane: "apts", keyboard: false, title: `${a.icao} ${a.name}` });
       m.bindPopup(() => this.airportPopup(a));
       m.addTo(this.aptLayer);
     }
+    this.declutter();
+  },
+  /** The labels that would overlap, the less important hidden (atcmap.js), once the map has drawn them. */
+  declutter() {
+    if (!this.map || this.declutterSoon) return;
+    this.declutterSoon = requestAnimationFrame(() => { this.declutterSoon = null; AtcMap.declutter(this.map.getContainer(), this.map.getZoom()); });
   },
   airportPopup(a) {
     let away = "";
@@ -3085,6 +3149,7 @@ const MapView = {
     this.zoneLayer.clearLayers();
     AtcMap.zones(this.zoneLayer, z, { vfr: this.mode === "vfr" });  // atcmap.js, shared with the website
     this.zoneAirports = z.airports || [];
+    this.declutter();
     const gate = z.gate ? `${z.gate.icao}:${z.gate.name}` : "";
     if (gate !== this.gateSeen) {  // ground gave a gate: the gates drawn again, yours among them
       this.gateSeen = gate;

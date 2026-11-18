@@ -44,6 +44,7 @@ class OwnshipState(Event, tag="ownship_state"):
     xpdr_ident: bool = False
     com1_tx: bool = False
     com2_tx: bool = False
+    com2_rx: bool = False  # COM2 being listened to (its receive switch): the other traffic heard on it too
     com1_type: str = ""
     com1_ident: str = ""
     gear_down: bool = True
@@ -208,6 +209,29 @@ class WeatherReport(Event, tag="weather_report"):
     dewpoint_c: float | None = None
 
 
+class PilotReport(msgspec.Struct, frozen=True, kw_only=True):
+    """One pilot report (PIREP or AIREP): where, at what level, and the ride, icing and cloud tops it gives."""
+
+    lat: float
+    lon: float
+    alt_ft: int
+    turbulence: str = ""  # NEG, LGT, LGT-MOD, MOD, MOD-SEV, SEV, EXTRM ("" not reported)
+    icing: str = ""  # the same scale, TRC as well
+    tops_ft: int | None = None  # the cloud tops reported
+    aircraft: str = ""  # its type designator
+    age_min: float = 0.0  # how old it was when fetched
+    raw: str = ""
+    own: bool = False  # this flight's own report, to ATC
+
+
+class PilotReports(Event, tag="pilot_reports"):
+    """The pilot reports around the flight (aviationweather.gov's public PIREP feed), and this flight's own: what ATC
+    answers a ride question from. Recorded, so a replay hears the same reports."""
+
+    area: str  # the airport they're around
+    reports: tuple[PilotReport, ...] = ()
+
+
 class AtisReport(Event, tag="atis_report"):
     """An airport's real ATIS, as published (the FAA's digital ATIS, from atis.info; elsewhere the airport's D-ATIS from
     ATIS.guru): used with ``[atc] atis_source`` "real" or "hybrid". Recorded, so a replay hears the ATIS the
@@ -341,13 +365,22 @@ class ArrivalLeg(msgspec.Struct, frozen=True, kw_only=True):
     transition: str = ""
 
 
+class ArrivalProcedure(msgspec.Struct, frozen=True, kw_only=True):
+    """One of an airport's arrivals (STARs) in the sim's navdata: its name and legs, each with its transition."""
+
+    name: str
+    legs: tuple[ArrivalLeg, ...] = ()
+
+
 class ArrivalData(Event, tag="arrival_data"):
     """An arrival procedure's legs, from the sim's navdata: the copilot checks its altitude and speed restrictions.
-    ``legs`` empty: the sim has no such arrival (or nothing published on it)."""
+    ``legs`` empty: the sim has no such arrival (or nothing published on it). ``others``: every arrival at the airport
+    (ATC gives the one for the runway in use when the filed one doesn't go to it)."""
 
     airport: str
     name: str
     legs: tuple[ArrivalLeg, ...] = ()
+    others: tuple[ArrivalProcedure, ...] = ()
 
 
 class DepartureProcedure(msgspec.Struct, frozen=True, kw_only=True):
@@ -446,6 +479,9 @@ class CrewSpeech(Event, tag="crew_speech"):
     language: str = ""  # said in the pilot's language ("de"), not English: a voice of that language speaks it
 
 
+REPEATED = "-"  # CabinSpeech.summary: the announcement just made, in the airline's other language
+
+
 class CabinSpeech(Event, tag="cabin_speech"):
     """A cabin crew member speaking (crew.cabin): ``channel`` "pa" on the address system to the passengers, or
     "interphone" on the handset to the flight deck. ``chime`` the chime before it ("pa", "call"; "" none)."""
@@ -458,6 +494,30 @@ class CabinSpeech(Event, tag="cabin_speech"):
     locale: str = ""  # their English ("fr-FR": a French crew speaking English)
     language: str = ""  # said in another language ("fr"): a voice of that language speaks it
     spoken: str = ""  # the words for speech, if they differ from the text
+    summary: str = ""  # the radio log's few words for an announcement ("Safety briefing"; REPEATED: said again in another language)
+
+
+class CabinIncident(Event, tag="cabin_incident"):
+    """A problem in the cabin (crew.cabin_incidents), each step recorded: ``stage`` reported, decided (the captain's
+    ``decision``: continue, assist, divert, escalate), update, resolved (with its ``outcome``). ``why``: what made it come up
+    on this flight. ``delay_s``: what it costs the boarding. Heard by ATC and Airport Ops."""
+
+    incident: str
+    kind: str  # medical, unruly, smoke, suspicious, lavatory, gate_assist
+    severity: str = ""
+    stage: str = "reported"
+    decision: str = ""
+    outcome: str = ""
+    why: str = ""
+    phase: str = ""
+    delay_s: float = 0.0
+    airborne: bool = True
+
+
+class TurnaroundState(Event, tag="turnaround_state"):
+    """The turnaround's timeline as JSON (turnaround_plan.Turnaround.to_json), for the EFB and the replay."""
+
+    data: str = ""
 
 
 class RampSpeech(Event, tag="ramp_speech"):
@@ -646,6 +706,7 @@ class RadioChatter(Event, tag="radio_chatter"):
     controller: str = ""  # tower, ground, ... (the controller's manner of speaking)
     locale: str = ""  # the region's English, for the voices
     ident: str = ""  # the other aircraft's callsign as filed ("RYR123"), for its airline's colour in the log
+    radio: int = 1  # heard on COM1, or on COM2 being monitored
 
 
 class SessionNote(Event, tag="session_note"):
@@ -720,13 +781,13 @@ class TrafficControlStatus(Event, tag="traffic_control_status"):
 
 SimEvent = Union[OwnshipState, AircraftIdentity, TrafficSnapshot, SimLifecycle, ConnectionStatus, AirportData,
                  NearbyAirports, AircraftSystems, ArrivalData, DeparturesData, ApproachesData, TrafficIdentity, AiObjectAssigned, ModelList,
-                 TrafficControlStatus, AircraftInputEvents, WeatherReport, AtisReport, AircraftVars, NoticesReport,
+                 TrafficControlStatus, AircraftInputEvents, WeatherReport, PilotReports, AtisReport, AircraftVars, NoticesReport,
                  OpsSnapshot, TerrainGrid, SimFrameRate, OnlineAtc]
 RadioEvent = Union[PttPressed, PttReleased, Transcript, AtcTransmission]
 AtcEvent = Union[PhaseChanged, ReadbackEvaluated, AtcAlert, RadioTuned, LlmExchange, AtisBroadcast, RadioChatter,
                  AtcThinking, AtcDecision, FlightArrived, AtcOperations]
 AppEvent = Union[SessionNote]
-CrewEvent = Union[IntercomPressed, IntercomReleased, IntercomHeard, CrewSpeech, CrewAction, CopilotEvent,
+CrewEvent = Union[CabinIncident, TurnaroundState, IntercomPressed, IntercomReleased, IntercomHeard, CrewSpeech, CrewAction, CopilotEvent,
                   ChecklistState, CabinSpeech, CabinSound, RampSpeech, GroundStatus]
 BusEvent = Union[SimEvent, RadioEvent, AtcEvent, AppEvent, CrewEvent]
 

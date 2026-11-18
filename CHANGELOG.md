@@ -4,7 +4,7 @@ Every release of LocalTC, newest first. The app shows a version's section when a
 and the website's changelog page is built from this file. Versions follow [semantic versioning](https://semver.org):
 a new minor version adds features, a patch fixes them.
 
-## [0.5.6] - Upcoming
+## [0.5.9] - Upcoming
 
 ### Added
 - **"Copilot: next frequency" on the ATC tab:** a button at the bottom left has the copilot put the frequency the flight
@@ -25,7 +25,8 @@ a new minor version adds features, a patch fixes them.
   on; one not done yet is said ("Beacon? Shows off, still to do.") and the checklist goes on by itself once it's
   right; an item left to the captain is asked with what it shows ("Packs 1 and 2? Showing on."). The Fenix's flap
   lever, seatbelt sign and landing lights are now read from its own switches (the sim's didn't follow them), and the
-  TCAS and seatbelt sign the copilot sets move its own knobs. In challenge and response, any aircraft's item the
+  seatbelt sign the copilot sets moves its own knob (the TCAS is the captain's: "still to do" until it shows TA/RA).
+  In challenge and response, any aircraft's item the
   copilot can see already done is said done, not asked.
 - **After takeoff checklist for the A320 family:** landing gear up, flaps retracted, packs on (the QRH's), offered
   once the flaps are up.
@@ -36,96 +37,6 @@ a new minor version adds features, a patch fixes them.
 - **This build updates from its own fork:** LocalTC with the VATSIM / IVAO hybrid mode looks for updates only in
   github.com/lorenzobusy-art/LocalTC (releases tagged online-atc-N), so an official release never replaces it unasked
   (nor fails to start on its settings). Settings → Updates says so; to go back to the official LocalTC, reinstall it.
-- **VATSIM/IVAO controller integration:** turn it on in Quick Settings → ATC, and the ATC tab asks before each flight
-  whether it's flown with Only LocalTC, VATSIM hybrid (+ LocalTC) or IVAO hybrid (+ LocalTC), with the rule explained beside it (Start waits for the choice). With a network, its controllers around
-  the route are looked up each minute from its public data feed. Their sectors are LocalTC's own: a centre works its FIR
-  and an approach its approach area, the same outlines LocalTC hands flights between and the Live Map draws (one with
-  no outline, up to 60 nm round its airport and never across into the next FIR: Zurich's approach doesn't work
-  Milan); delivery,
-  ground and tower their own airport (a tower its zone too, never the next field's). The networks' top-down rule is
-  kept: a controller works the positions below theirs that nobody's on, in their own airspace, never one above (an
-  approach with no tower or ground does all three, a tower with no ground does ground, a centre with nobody below does
-  everything, a tower never works an approach). When one works your airspace for the phase you're in, the copilot says
-  "VATSIM connection for this airspace, set 121.800 on COM1"; when the one you're on can't work the next phase and
-  nobody online can (their ground, at the runway, with no tower, approach or centre), it gives you LocalTC's controller
-  and frequency for it. While COM1 is on
-  their frequency (or the network's ATIS), LocalTC's controllers and its other traffic stay quiet, nothing is said on
-  the radio for you, and your push-to-talk isn't recorded or transcribed: you're talking to a person through the
-  network's own client. The copilot carries on with its callouts, checklists and warnings on the intercom; a call it
-  would have made on the radio it hands to you. Off their frequency, or once they log off, LocalTC's ATC takes the
-  flight on from where it is. The choice can be changed in flight too: it applies at once, nothing restarted.
-  On their frequency LocalTC's last level, heading, speed and squawk are theirs: neither LocalTC nor the copilot holds
-  you to them, and the flight plan waits. Off it (their "contact unicom" too), the copilot says once which LocalTC
-  controller to call: the airspace after the one the network's controller worked, along the flight (released by an
-  online FIR, the next FIR, never LocalTC's version of the one you left), and LocalTC carries on from there with the
-  plan. LocalTC's own controllers hand you over too, saying only where, by the network's airspace ("contact Roma
-  Radar 124.2"); the copilot is the one who says it's VATSIM's or IVAO's, once a controller, after your readback (or
-  once you're on their frequency), never over the controller. An online controller that released you isn't
-  proposed again (nor any other sector of that airspace: Wien's other radar too) for twenty minutes or until you've
-  left it, and a route clipping it again along a border stays with the centre it's with. On an online controller's frequency a few miles before their
-  airspace (they asked on the network's chat), you're with them: no "nobody online" from the copilot; that's only for
-  a position below the one the flight needs (their ground, at the runway) with nobody above online.
-- **The flight's frequencies on the Live Map:** a table on the left with every airspace of the flight in the order it's
-  flown (the departure's delivery, ground, tower and departure, each FIR along the route, the arrival, tower and ground),
-  its frequency, and who works it: LocalTC's controller, or the online network's (marked where it's top-down, working a
-  position below its own that nobody's on). It's worked out by the ATC with the rule it flies by, and the row COM1 is on
-  is lit.
-- **Ground crew:** the turnaround and the push by voice, with no menus. Call them on the ramp frequency, 119.990 at every
-  airport (RAMP in the frequency list, or "tune ramp" to the copilot), or on the intercom starting with "ramp". Off by
-  default, in Settings → Ground crew.
-- **What the ground crew do:** fuel, catering, water, lavatory, cleaning, de-icing, the GPU, the jetway and stairs, several
-  in one call ("catering, fuel and a GPU please"), what's still outstanding, and calling one off. They answer GSX's
-  questions for you and tell you what it's waiting on (GSX through its own Remote API; without it, the sim's own tug and
-  jetway). The push waits for ATC's clearance, the parking brake and the engines, and the cabin crew look after boarding.
-  Without a cloud language model they understand set phrases; with one, what you say your own way.
-- **Every language gets the full copilot, ground crew and cabin crew:** in German, French, Spanish, Italian, Portuguese,
-  Dutch, Polish, Swedish, Russian and Mandarin, numbers said as words ("zehntausend Fuß", "deux cent cinquante"), feet,
-  knots and flight levels are understood, and the copilot's common answers (fuel, altitude, speed, heading, time to go)
-  come in your language without a language model. The ground crew answer you in it (the push's safety calls stay in
-  aviation English), and so do the cabin crew.
-- **Your flight on Discord:** an option in Settings, off by default, shows your route, the phase and the frequency you're
-  on, with a "Fly on LocalTC" button to localtc.tech.
-- **How the cabin crew use the language model:** Fully scripted, Semi, Mostly or Fully LLM, in Settings → Cabin crew.
-- **ATC clears you on a SID that leaves from your runway,** read from the airport's procedures in the sim. A SID filed for
-  another runway is swapped for the one from your runway going the same way; with none, you're cleared with radar vectors
-  to your first fix. The runway is still ATC's choice, or the plan's with `enforce_fpln_runways`.
-- **COM2 works:** ATC, the ground crew and the copilot follow the radio selected to transmit on. Click COM1 or COM2 in
-  the radio bar to choose, also on aircraft whose own selector the sim can't see.
-
-### Changed
-- **Quick Settings comes in sections** (Voice & radio, ATC, Crew, Traffic, AI & models), with a box to find a setting.
-  The switches beside the radio box are now "ATC voice" and "Copilot radio", each with a light, and the X beside the
-  typing box is gone.
-- **Many more real arrivals:** 75 real aircraft to start with, not 40 (up to 120 with frames to spare, fewer if the sim
-  struggles), seen out to 60 nm. Arrivals, departures and the gates each get a share, so at a busy airport the aircraft
-  on the ground no longer take every place, and light aircraft no longer count as arrivals.
-- **The traffic manages itself:** how many real aircraft follows the sim's frame rate, and which follows where you are
-  (at an airport, climbing out or coming in, or in the cruise).
-- **Traffic is lighter on the frame rate:** real aircraft on the ground are shown within 8 nm of you, up to 12 made-up
-  ones on the ramps by default, no more than three of one model on a GA ramp, and six real departures taxiing at once.
-- **Static aircraft (Quick Settings → Traffic)** are Auto (was Realistic), Fixed or None, with an "Up to" limit of their
-  own.
-- **The Live Map draws the airports around you with or without a flight plan,** not only the plan's origin and
-  destination.
-- **ATC understands more of your own words, with a small local model too:** "good to go" at the runway, "can we go" at
-  the gate, "off the runway, where do you want us". A question about traffic gets an answer, and the destination's tower
-  frequency asked for in the cruise is told.
-- **ATC in an emergency acts on your intentions:** "we need to land at the nearest airport" gets vectors, souls and fuel
-  already given aren't asked again, a mayday on the old frequency is answered there, and an engine failure or "immediate
-  landing" counts as an emergency.
-- **The language model is kept from more wrong replies:** "clearance granted" for a clearance on request, "continue as
-  filed" at the gate, "unable" to a call that asked nothing, made-up traffic, emergency details left out. The crew's
-  refusals and facts ("Parking brake first") are always said as written.
-- **The copilot** turns the seatbelt sign off at the gate, takes "yes, please ask for it" as a yes, and says it doesn't
-  know instead of "say again". Its language model is on Fully LLM by default, and its Polish voice is Piper's (the voice
-  library's was hard to make out; the pack downloads the first time it's needed).
-- **The cabin crew's language model is a cloud one only:** without a cloud model they use the script's words. Safety
-  announcements are never reworded.
-- **Speech recognition hears the crew's words in your language** ("checklist" was heard as "Cake list", "Klappen" as
-  "Captain"), and numbers as they're written ("10.000", "10 000", "CAP270").
-- **Talking to ATC with the copilot in another language:** the radio is heard by the English speech model ("Frontier 603"
-  was "Frontier 600 and 3"), and your own language on the radio gets "ATC only works in English" from the copilot
-  instead of ATC's "say again".
 
 ### Fixed
 - **The descent comes before the FMS's top of descent:** never later than 3 nm a thousand feet plus 10 nm to slow down
@@ -194,60 +105,424 @@ a new minor version adds features, a patch fixes them.
 - **A callsign no airline list knows is heard:** a virtual airline's "VND1128" said "Victor November Delta 1128", or
   typed "VND1128" / "vnd 1128", is the pilot's own. It was taken for another flight (or no callsign at all), and ATC
   asked "say again your callsign" after almost every call.
-- **An emergency can be cancelled:** "cancel the emergency", "cancel mayday", "no longer an emergency" gets "roger,
-  emergency cancelled", and the copilot drops it too (no "squawk 7700?", no diversion offered). It used to be taken for
-  another emergency, priority and all (a Mayday speech-to-text had made up in the noise at the end of a call).
-- **Taxi routes said as a controller says them:** numbered pieces of one taxiway one after another are that taxiway
-  ("G1, G2, G3" is "G"); a link on its own stays ("C3, C, C1").
-- **VATSIM / IVAO hybrid flies with the network's traffic:** LocalTC's own real-world flights are off then (chosen
-  in flight too), so the sky isn't two skies on top of each other; ATC sees the network's aircraft the pilot client
-  puts in the sim, for traffic and the runway. Only LocalTC brings LocalTC's traffic back, as set.
-- **The network's pilots on the Live Map:** with VATSIM / IVAO hybrid, the network's pilots within 250 nm are drawn
-  as traffic (their type says which network), from the same download as its controllers; the nearest, which the
-  pilot client puts in the sim, are drawn from the sim as before.
-- **Other flights' taxi routes from where they are:** a controller tells another aircraft (VATSIM's, IVAO's or the
-  sim's) the taxiways from its own stand or taxiway to its runway, not a route from some other gate.
-- **The descent says where to stop, in Europe as Europe does:** "when ready descend FL110, cleared TINI9W arrival"
-  ahead of the top of descent (so you start down at your own, the FMS's, not the plan's; without "when ready" only
-  when you're already on the way down), "continue descent 3,000 feet" from the next centre or approach read back like any
-  altitude (no "roger" to the readback), and the approach clearance on a STAR never above what the STAR already gave
-  ("descend 3,000 feet, cleared ILS Y runway 35 approach, contact Linate Tower 118.1 when established"; the sector
-  minimum is for vectors, not a published arrival); in Europe the tower is called "when established" (not "descend via" alone, the FAA's), "continue descent FL110" from the next centre, and the approach
-  clearance on a STAR with the altitude to join the final at ("descend 4,000 feet, cleared ILS runway 09R approach"),
-  never a clearance that leaves the flight at FL150. Where the arrival ends is its lowest published restriction from
-  the sim's navdata; a plan's predicted level at its last fix (FL250 thirty miles out) is no longer taken for it.
-- **Flight levels above each country's own transition altitude** (5,000 ft in France, 6,000 in Italy): the default
-  config forced the FAA's 18,000 everywhere, so Europe heard "descend 15,000 feet" for FL150.
-- **An arrival said again is an arrival:** "negative, I say again, via the TINI9W arrival", not "departure".
-- **A level reported to radar is answered:** "maintaining FL150" with 4,000 given gets the 4,000 said again; the level
-  given gets "roger". A thank-you still needs no answer.
-- **Two controllers on one frequency** (Malpensa's 120.9 is both its clearance and a tower): in the air the tower
-  answers, and after "contact Milan Radar Departure" an "airborne" on 120.9 is sent on again, not answered by the
-  clearance as "out of range".
-- **A direct only to a fix that exists:** "direct NOBKE" heard as "direct knob" is NOBKE, the route's fix it sounds
-  like, never a "Knob Itarrow" nobody can find; a name that's no fix of the flight is asked again.
+
+## [0.5.8] - 2026-11-17
+
+### Added
+- **The arrival sequence:** approach tells you where you are in the landing order ("number three for runway 28R"), stretches
+  the downwind to the gap behind the one ahead (its wake spacing, and "extend downwind, I'll call your base"), and a direct
+  asked for with arrivals stacked ahead waits for the sequence ("unable direct for sequencing, expect it in about four
+  minutes"), given unasked once it fits.
+- **Side-steps:** on final to a runway with an aircraft stopped on it, a free parallel beside it in visual weather: tower moves
+  you across and clears you there; asked for ("request side-step to 28L") on the approach, the same.
+- **Landing after a departure:** on final with a departure starting its roll, the landing clearance comes with it ("traffic
+  A320 departing ahead"; ICAO "behind the departing ..."), watched: still there on short final, a go-around.
+- **Below visual minimums:** a visual approach expected and the weather going under it before the clearance: the
+  instrument approach to that runway instead, and said why.
+- **Named visual approaches:** the FAA's 49 charted visuals at 34 airports (the River Visual at Washington, Quiet Bridge
+  and Tipp Toe at San Francisco ...), given by name in the weather for their landmarks, or asked for by name.
+- **The push and the taxi congestion:** ground holds the push for an aircraft taxiing behind you, or at the gate for a while
+  when the line at the runway is long, and calls you when it's time; GSX waits armed until then.
+- **Say again in other words:** a clearance asked for again is "I say again" and another of its wordings, not the same
+  recording.
+- **Ride reports:** "any reports of turbulence?" is answered from the real pilot reports around the flight (aviationweather.gov's
+  free feed) and your own ("moderate chop at 350", tops, icing), and "request a smoother ride" gets the level with the
+  least reported, checked against the terrain; "what's our clearance?" is answered from what you're cleared for.
+- **Traffic:** departures wait two minutes behind a heavy (three behind a super), a longer line for the runway while
+  you're on the ground, landings with a flare, the nose lowered and spoilers out, takeoffs with a rotation; light
+  aircraft heard in the circuit (touch and goes, the option) and on flight following; other pilots heard on COM2 too
+  when it's being listened to, and never on clearance delivery.
+- **Sights from the cabin:** in the cruise the cabin crew points out a famous landmark by day, or a big city (its lights at
+  night), on the side you'll see it.
+- **The sim's toolbar panel (VR):** a LocalTC button on the sim's toolbar showing the radio log and the radios inside the
+  sim, from the app on this PC (port 47810). Built once with the MSFS 2024 SDK (`tools/build_sim_panel.py`, the sim
+  running), then put in the Community folders by the app.
+- **The turnaround as a timeline:** twelve milestones from parked to ready for departure, each with its time and the reason for it (the
+  passengers and doors, the fuel still to load, the seats, the airline's kind of operation, the airport), what it waits on, and how it
+  stands against the plan's off-block time. Too early, the ramp tells you when a service's slot opens and calls it then (ask twice
+  and they come anyway); the copilot reminds you when something's late and what it does to the push; the ramp, the cabin and the
+  copilot each answer how it's going; the EFB's Airport Ops shows it. Quick Settings → Ground crew: off, times and reminders only, or
+  realistic, and an airline profile (full service, low cost, regional, cargo, or from the airline).
+- **Cabin incidents** (off unless you turn them on: rare, normal, frequent): a medical event, an unruly passenger, smoke or a smell, a
+  security concern, a cabin system fault, or a passenger needing help at the gate, played by the cabin crew. You decide: carry on, get
+  assistance, divert or declare, and ATC, Airport Ops and the emergency services follow. When they come depends on the flight (its
+  length, the passengers, the weather, how late it is), never in a critical phase, one at a time and an hour apart, and a replay has the
+  same ones. Each ends with its outcome recorded.
+- **ATC's conditions:** "behind the departing ..., line up and wait behind", "follow the ..." on the taxi (and "slow down" when
+  catching it), and each condition records what it needed next.
+- **Dynamic routing:** vectors for descent when well above the profile, "reduce to 250 for spacing" behind a slower arrival and
+  "resume normal speed" after, a turn for traffic that's still coming after it's been called, the descent held at FL240 when
+  arrivals are stacked ahead, and every direct, heading and altitude checked against the route, hazards and terrain.
+- **Terrain:** minimum safe altitudes by phase and region, route corridors, a caution in mountains, a descent kept high until the
+  way to the arrival is clear of the ground, a vector into rising ground turned to a safe heading, and an altitude below the
+  minimum refused.
+- **VATSIM/IVAO controller integration:** off by default, so a flight is LocalTC's ATC alone. Turn it on in Quick Settings → ATC, and the ATC tab has the choice
+  whether it's flown with Only LocalTC, VATSIM hybrid (+ LocalTC) or IVAO hybrid (+ LocalTC), with the rule explained beside it (Only LocalTC until you pick another). With a network, its controllers around
+  the route are looked up each minute from its public data feed. Their sectors are LocalTC's own: a centre works its FIR
+  and an approach its approach area, the same outlines LocalTC hands flights between and the Live Map draws (one with
+  no outline, up to 60 nm round its airport and never across into the next FIR: Zurich's approach doesn't work
+  Milan); delivery,
+  ground and tower their own airport (a tower its zone too, never the next field's). The networks' top-down rule is
+  kept: a controller works the positions below theirs that nobody's on, in their own airspace, never one above (an
+  approach with no tower or ground does all three, a tower with no ground does ground, a centre with nobody below does
+  everything, a tower never works an approach). When one works your airspace for the phase you're in, the copilot says
+  "VATSIM connection for this airspace, set 121.800 on COM1"; when the one you're on can't work the next phase and
+  nobody online can (their ground, at the runway, with no tower, approach or centre), it gives you LocalTC's controller
+  and frequency for it. While COM1 is on
+  their frequency (or the network's ATIS), LocalTC's controllers and its other traffic stay quiet, nothing is said on
+  the radio for you, and your push-to-talk isn't recorded or transcribed: you're talking to a person through the
+  network's own client. The copilot carries on with its callouts, checklists and warnings on the intercom; a call it
+  would have made on the radio it hands to you. Off their frequency, or once they log off, LocalTC's ATC takes the
+  flight on from where it is. The choice can be changed in flight too: it applies at once, nothing restarted.
+  On their frequency LocalTC's last level, heading, speed and squawk are theirs: neither LocalTC nor the copilot holds
+  you to them, and the flight plan waits. Off it (their "contact unicom" too), the copilot says once which LocalTC
+  controller to call: the airspace after the one the network's controller worked, along the flight (released by an
+  online FIR, the next FIR, never LocalTC's version of the one you left), and LocalTC carries on from there with the
+  plan. LocalTC's own controllers hand you over too, saying only where, by the network's airspace ("contact Roma
+  Radar 124.2"); the copilot is the one who says it's VATSIM's or IVAO's, once a controller, after your readback (or
+  once you're on their frequency), never over the controller. An online controller that released you isn't
+  proposed again (nor any other sector of that airspace: Wien's other radar too) for twenty minutes or until you've
+  left it, and a route clipping it again along a border stays with the centre it's with. On an online controller's frequency a few miles before their
+  airspace (they asked on the network's chat), you're with them: no "nobody online" from the copilot; that's only for
+  a position below the one the flight needs (their ground, at the runway) with nobody above online.
+- **The flight's frequencies on the Live Map:** a table at the top, beside the zoom buttons and folded until you open it (as the legend now is too), with every airspace of the flight in the order it's
+  flown (the departure's delivery, ground, tower and departure, each FIR along the route, the arrival, tower and ground),
+  its frequency, and who works it: LocalTC's controller, or the online network's (marked where it's top-down, working a
+  position below its own that nobody's on). It's worked out by the ATC with the rule it flies by, and the row COM1 is on
+  is lit.
+- **Ground crew:** the turnaround and the push by voice, with no menus. Call them on the ramp frequency, 119.990 at every
+  airport (RAMP in the frequency list, or "tune ramp" to the copilot), or on the intercom starting with "ramp". Off by
+  default, in Settings → Ground crew.
+- **What the ground crew do:** fuel, catering, water, lavatory, cleaning, de-icing, the GPU, the jetway and stairs, several
+  in one call ("catering, fuel and a GPU please"), what's still outstanding, and calling one off. They answer GSX's
+  questions for you and tell you what it's waiting on (GSX through its own Remote API; without it, the sim's own tug and
+  jetway). The push waits for ATC's clearance, the parking brake and the engines, and the cabin crew look after boarding.
+  Without a cloud language model they understand set phrases; with one, what you say your own way.
+- **Every language gets the full copilot, ground crew and cabin crew:** in German, French, Spanish, Italian, Portuguese,
+  Dutch, Polish, Swedish, Russian and Mandarin, numbers said as words ("zehntausend Fuß", "deux cent cinquante"), feet,
+  knots and flight levels are understood, and the copilot's common answers (fuel, altitude, speed, heading, time to go)
+  come in your language without a language model. The ground crew answer you in it (the push's safety calls stay in
+  aviation English), and so do the cabin crew.
+- **Your flight on Discord:** an option in Settings, off by default, shows your route, the phase and the frequency you're
+  on, with a "Fly on LocalTC" button to localtc.tech.
+- **How the cabin crew use the language model:** Fully scripted, Semi, Mostly or Fully LLM, in Settings → Cabin crew.
+- **ATC clears you on a SID that leaves from your runway,** read from the airport's procedures in the sim. A SID filed for
+  another runway is swapped for the one from your runway going the same way; with none, you're cleared with radar vectors
+  to your first fix. The runway is still ATC's choice, or the plan's with `enforce_fpln_runways`.
+- **COM2 works:** ATC, the ground crew and the copilot follow the radio selected to transmit on. Click COM1 or COM2 in the radio bar to choose, also on an aircraft whose own selector ignores the sim.
+- **Play buttons on the ground crew's calls**, on the radio and on the interphone.
+- **Approach clears you from the STAR's end onto the approach:** LocalTC reads each approach's transitions from the sim. Where a STAR ends at a fix the approach goes on from (Denver's LONGZ at KAILE, the ILS 17R's KAILE transition), you're cleared for the approach on the STAR, with no headings. A STAR filed under another revision than the sim's (LONGZ3 and LONGZ4) is still found. Approach says nothing more once it has handed you to tower.
+- **Break break:** an urgent call (a go-around, a hold short) comes at once, even straight after ATC's words to you, with "break, break", and your readback of what went before isn't waited for.
+- **Join a flight in progress:** start LocalTC (or restart it) in the air, or taxiing in, and press New Flight with your filed plan. The flight carries on from where it is: the clearance, takeoff and SID count as given, your squawk as assigned, your level as cleared. ATC works out who you should be talking to (departure, the centre for where you are, approach, tower) and tells you, and your first call there is the check-in. With the copilot on the radio, it tunes and checks in for you. No "off blocks, 40 minutes late" in the cruise.
+- **A new Getting Started:** a guide in sections, each a short tutorial. Quick start, your first flight call by call from gate to gate, talking on the radio, the copilot, the cabin and ground crews, joining a flight under way, a tour of the app, voices and models, the phone and tracker, troubleshooting, and reporting a problem. It opens on the last section you read, in all ten languages (the example radio calls stay in English, like the radio). A joystick push-to-talk shows as "button 0 on controller 0", not its setting.
+- **More boarding music:** a different track each flight, and the next one after it ends. "Lobby Time", "Local Forecast - Elevator", "Bossa Antigua", "Smooth Lovin" and "Easy Lemon" join "Airport Lounge" (all Kevin MacLeod, CC BY 3.0).
+
+### Changed
+- **ATC runs the live traffic's runways:** the live feed now only says roughly where a real flight is and who it is.
+  From about 25 miles out, LocalTC flies each arrival itself to the runway ATC gives it, one of the ATIS's landing
+  runways, never the one the real flight used (an Air Transat landed on 06L with only 06R in use). It comes straight
+  in, by a base, or round by a downwind from the wrong side, spaced on the final behind the one ahead (or you), with a
+  turn round when it's too close or too high. Tower clears it to land on that runway. A runway still taken sends it
+  around, then round for another approach. Departures taxi to ATC's departure runway, wait for an arrival close in,
+  and fly to the real flight's track after takeoff before following it again.
+- **Quick Settings comes in sections** (Voice & radio, ATC, Crew, Traffic, AI & models) with a box to find a setting. The switches beside the radio box say what they do, "ATC voice" and "Copilot radio", each with a light, and the X beside the typing box is gone.
+- **Many more real arrivals:** 75 real aircraft to start with, not 40 (up to 120 with frames to spare, fewer if the sim
+  struggles), seen out to 60 nm. Arrivals, departures and the gates each get a share, so at a busy airport the aircraft
+  on the ground no longer take every place, and light aircraft no longer count as arrivals.
+- **The traffic manages itself:** how many real aircraft follows the sim's frame rate, and which follows where you are
+  (at an airport, climbing out or coming in, or in the cruise).
+- **Traffic is lighter on the frame rate:** real aircraft on the ground are shown within 8 nm of you, up to 12 made-up
+  ones on the ramps by default, no more than three of one model on a GA ramp, and six real departures taxiing at once.
+- **Static aircraft (Quick Settings → Traffic)** are Auto (was Realistic), Fixed or None, with an "Up to" limit of their
+  own.
+- **The Live Map draws the airports around you with or without a flight plan,** not only the plan's origin and
+  destination.
+- **ATC understands more of your own words, with a small local model too:** "good to go" at the runway, "can we go" at
+  the gate, "off the runway, where do you want us". A question about traffic gets an answer, and the destination's tower
+  frequency asked for in the cruise is told.
+- **ATC in an emergency acts on your intentions:** "we need to land at the nearest airport" gets vectors instead of "say intentions" again, souls and fuel already given aren't asked for, a mayday on the old frequency is answered there, and an engine failure or "immediate landing" counts as an emergency.
+- **The language model is kept from more wrong replies:** "clearance granted" for a clearance on request, "continue as
+  filed" at the gate, "unable" to a call that asked nothing, made-up traffic, emergency details left out. The crew's
+  refusals and facts ("Parking brake first") are always said as written.
+- **The copilot** turns the seatbelt sign off at the gate, takes "yes, please ask for it" as a yes, and says it doesn't
+  know instead of "say again". Its language model is on Fully LLM by default, and its Polish voice is Piper's (the voice
+  library's was hard to make out; the pack downloads the first time it's needed).
+- **The cabin crew's language model is a cloud one only:** without a cloud model they use the script's words. Safety
+  announcements are never reworded.
+- **Speech recognition hears the crew's words in your language** ("checklist" was heard as "Cake list", "Klappen" as
+  "Captain"), and numbers as they're written ("10.000", "10 000", "CAP270").
+- **Talking to ATC with the copilot in another language:** the radio is heard by the English speech model ("Frontier 603"
+  was "Frontier 600 and 3"), and your own language on the radio gets "ATC only works in English" from the copilot
+  instead of ATC's "say again".
+- **The ATC voice and Copilot radio switches look like the checkboxes they are.** The copilot's language model is on Fully LLM by default.
+- **The cabin crew:** each crew member has many more wordings of their own, and lines for the moment: night or morning, a delay, a full or a half-empty cabin, rain, snow, heat or cold, a short or a long flight, a bumpy one. The boarding announcement waits until half the passengers are on. Their words to you on the interphone are to you, not the passengers. They know what they just asked you, and they can't name another airline or say "good morning" in the evening. A second GSX boarding with the real passenger count is the one they announce. "We're up at flight level 380" waits until you are. "Sunny" is never said in the dark.
+- **ATC's long lines start sooner:** a long transmission is played a sentence at a time, the first as soon as it's made. A clearance took 16 seconds from your call to its first word.
+
+### Fixed
+- **The real ATIS read as published:** Europe's spelled-out wind ("WIND TDZ 040/5KT VRB BTN 010 AND 080") is the
+  ATIS's wind, not the METAR's "calm"; CAVOK and the METAR's clouds are said; a "notice for pilots" and "when ready
+  contact ... ramp" are put back together across datalink's line ends and read out.
+- **The arrival for the runway in use:** a filed STAR that doesn't go to the runway landing on (the sim's navdata) is
+  swapped for the one that does from the same place, or none and vectors; no vectors before the flight is on it.
+- **Vectors:** the base turn is towards the final from the side the aircraft is really on; vectored off the STAR, the
+  level cleared stays (no unsaid 11,100); altitudes in round numbers (2,000, not 2,100); no hold once vectored; hold
+  updates and the landing number said less often, the number only when it gets better.
+- **Directs:** never the same fix twice, never onto the STAR, only when they save 15 miles or more.
+- **Tower:** a go-around of the traffic to line up behind lets the takeoff clearance come; a conditional line-up no
+  longer sends LocalTC's arrival around.
+- **The copilot:** off the radio at the start of every flight; switched on after a handoff, it changes frequency and
+  calls; never sets the altimeter by itself; "Altitude!" three times at most; no "off the taxi route" on the runway;
+  its calls written as numbers in the radio log.
+- **ICAO clearances** without the FAA's "expect FL390 ... minutes after departure"; the model's words must keep
+  "cleared to" the destination, and no "no problem" or "looking good".
+- **Speech:** "Inflammation" is information, "mic" Mike, "Bravo Tango" taxiway BT where the airport has it; a long call
+  heard as a few words is heard again with a shorter prompt.
+- **The app** opens without the last flight's plan once that flight has parked.
+- **Other flights on the radio:** told to climb or descend from where they really are (their flight level, not their
+  true altitude: one at FL410 was told "climb to FL390"); they always ask for their clearance, push and taxi first;
+  callsigns with letters in their number said as the airline ("Ryanair 9SY", "Turkish 1YH", "Nas Express 660",
+  "El Al", "Air India", "Sky Dubai"); none in a controller's voice; no controller handing one to itself.
+- **Traffic calls** in good time (from 8 miles), one a minute at most, and the same aircraft never called twice.
+- **"Start your descent now"** no sooner than two minutes after the descent was given; no mountain caution on a
+  cleared approach or where the minimum is low.
+- **Gates for the biggest aircraft:** where the scenery lists no gate big enough (Dubai's say 32 m for an A380), its
+  biggest gates take it, in the gate list and when asked for; "taxi to Gate A3", not "stand Gate A3".
+- **GSX:** its parking page (asked for the jetway before it has you parked) is put away with a word, never read out;
+  its handler matched by any of the airline's names and codes.
+- **The cabin** starts boarding early without talk of being ahead of the plan.
+- **LocalTC's traffic** settles onto the runway at touchdown instead of dropping, and the sim is told how fast each
+  one is turning as it taxies.
+- **SID, STAR and fix names heard through speech recognition:** a name read back right but written as the word it sounds
+  like is taken as the flight's own: "direct Diamond" (DYAMD), "Lobster" (LBSTA), "loss at" (LOZIT), "Itloaf" (ITLOV),
+  "the Ocean 5 arrival" (OOSHN5), "the Angel for arrival" (ANJLL4, its number heard as a word), "Holt's niner" (HOLTZ9),
+  Europe's said as their whole fix with their letter ("Lazet one alpha" LAZE1A, "Vuteb three echo" VUTE3E). Only where
+  it sounds clearly more like that name than any other of the flight's, so a wrong fix or procedure said clearly is still
+  caught. Found by LocalTC's voices reading correct readbacks in ten accents to Whisper: 209 of 324 were taken as right
+  before, 302 now (297 of another 324 not tuned on). The flight's names in Whisper's prompt were tried and left out:
+  long readbacks came back cut short (11 of 30 clearances).
+- **Accents on the radio:** "direct" heard as "Dehect", "Dishect", "They hacked" or "Directs"; "hold at" as "hold a",
+  "hold it", "holt at" or "older"; "flight level 1 under" (one hundred), "1 to 0" (one two zero), "12-Z-Hoe" (a
+  "tsero"); "Esquark", "Isquark" and "is squawk"; "fly, level"; "then as filed" heard "Dennis filed"; "climb under
+  maintain"; "5350 in 10" (five thousand, three five zero in ten); "hold at" heard "halter".
+- **The live map** no longer piles labels on one another: where an airport's code, a centre's name, a fix or a badge
+  would cover another, the less important is hidden until you zoom in (your controllers, your route and its centres
+  first), and they're kept further apart zoomed far out.
+- **The app's tabs** stretch across the window, wider as it widens.
+- **The copilot in your language** says its everyday lines in it with no language model, in all nine: leaving
+  something alone, "already" (gear, flaps, lights, the seatbelt sign, the autopilot, the APU, the parking brake,
+  the transponder, the autobrake), why it won't ("negative, we're on the ground", "not below 1,000 feet"), what it
+  asks first (the autopilot off low, an emergency squawk, a level that isn't the clearance, "did you say ..."), the
+  radio calls it offers to make or leaves to you, where we are ("about 20 miles north-northeast of ...") and the
+  runway's headwind and crosswind. They were English before, or the language model's translation. A copilot with a
+  personality no longer puts its English "um"s into another language.
+- **The cabin crew's own calls** to the flight deck (boarding complete, cabin secure for takeoff and landing, running
+  late, the service, everyone off) are in your language when you talk with them in one, as their answers already were.
+- **The cabin's announcements in your language too:** with the copilot in another language, each announcement is made
+  in the airline's own languages first, then in yours, then in English (Lufthansa with a Polish captain: German,
+  Polish, English; Delta with a German one: English, German). An order to the crew ("doors to automatic") is still
+  given once, in the airline's first.
+- **Every announcement in every language:** the night departure, the exit rows, the rest of the safety briefing (flight
+  mode, laptops, no smoking), the seatbelt sign off again, the service paused for turbulence and the word about the
+  aircraft were only ever made in English. They're in all ten now, and the US doors call and the plain "seatbelt sign
+  off" use each language's own.
+- **The cabin crew talk to you in your language, all of it:** a problem on board (a medical case, a disruptive
+  passenger, smoke, a security concern, the lavatories, help at the gate) is reported in it with its question, how
+  it's going, what happens with your decision and when it's sorted. Your answer is understood in it too ("weiterfliegen",
+  "wir weichen aus", "Notfall erklären", "объявляем бедствие", "备降"). The boarding and turnaround timing, and what
+  they thought of the landing, are in it too. A call with any piece not translated is made whole in English, never
+  half in each.
+- **"Noch etwa twenty-two Minuten":** a number the crew told you in another language was English words. Digits now.
+- **Said by a man or a woman:** the copilot's and the cabin crew's lines in Polish, Russian, French, Spanish, Italian,
+  Portuguese and German take the speaker's forms ("Zrozumiałam" from a woman, "Понял" from a man): the cabin's Polish
+  and Russian answers were a woman's whoever was on.
+- **Your language on the radio is told again:** with the copilot in another language, a radio call in that language
+  is heard as it was said and you're told ATC works in English. The check that tells the language never ran (it
+  called a step that wasn't there), so every call was heard as English of a sort and only got "say again". Only
+  a language it's sure of (0.95) counts: English read back in a French accent measured 0.90 French, and is heard
+  as English; French, Spanish, Italian, Portuguese and Mandarin said on the radio measured 0.99 and up.
+- **A word Whisper writes a letter or two off** is read as the copilot's, ramp's or cabin's word it is ("Inserici il
+  pilota automatico", "Connecta", "Spenni il segnale cinture", "Fahrwerk einfachen", "Schöckliste fertig",
+  "Toilitten", "lavavos", "Lampa boardink"), where it's clearly that word and no other. The copilot asks a reading
+  like that back ("Did you say autopilot on?") and never just does it. Found by the copilot's and the crew's voices
+  saying 72 things in each language to Whisper base: 315 of 720 read before, 384 now on the same recordings.
+- **The ramp asks again rather than order a service** when a word beside it can't be read: a misheard "abbrechen" or
+  "abklemmen" ("Rampe, Catering, Applichen") had the catering asked for instead of cancelled. More of the ramp's
+  words: German "abklemmen" and "bitte schön", Dutch "boarden" and "koppel de GPU af", Russian "посадку", Swedish
+  "tabort", "60%".
+- **Numbers in Polish and Russian** agree with their noun ("22 minuty", "5 minut", Russian's "21 минута"), the
+  minutes in the cabin's calls too.
+- **Readbacks heard oddly but said right:** every readback ATC asks for, said right and written the ways speech
+  recognition writes it (tens of thousands of variations), is now taken as right. Among them: "climbing to 8,000",
+  "descending to 6,000", "descending 6,500" for the altitude you were given, "climbing and maintaining",
+  "squawking 4636", "210 knot", "lining up and waiting", "runway 1, 5", "flight level 6, 0", "1 4,500", "are nav",
+  "squad 4521", "hitting 270", and "expect 14,010 minutes" for the level and the 10 minutes run together. A frequency
+  followed by the callsign after a full stop ("134 decimal 05. 2LT") is no longer one number. "Juliett" spelled with
+  two t's no longer breaks the taxi route, the callsign after the last taxiway ("via Echo 7, 2LT") no longer runs into
+  it, and "runway 17, 2LT" is no longer read as N172LT. With the MONTN2 departure filed, "climb and maintain 2,000" is
+  no longer heard as "climb and MONTN2,000" (ATC's own words are never a procedure or a fix).
+- **A flight that turns back:** the centres no longer give "direct" to fixes the flight has already flown (an
+  autopilot lost over the Atlantic brought "direct EBMOS" and "direct MOBUB", the route's first fixes), and a flight
+  30 miles off its route in the cruise with nothing given to explain it is asked for its intentions.
+- **The push that never came:** once the push is called, GSX's "attach pushback tug?" is answered yes (it was
+  answered no, as while boarding, and the aircraft sat at the gate until the pilot pushed in GSX by hand); GSX's
+  questions and the crew's answers are in the log.
+- **The taxi after the push:** with a pushback to come, the copilot asks for taxi once pushed, not as soon as the
+  push is approved; and with GSX doing the push it no longer says the parking brake's still set (GSX wants it set
+  until the tug's on, and the ramp says when).
+- **The cabin's announcements, spread out again:** the exit rows on their own, a while after the welcome; the
+  safety demonstration once the aircraft really moves (GSX's push called isn't moving) and a while after that.
+- **Moved at the gate:** GSX moving the aircraft in jumps isn't the taxi ("watch the speed, 234 knots" at the
+  stand), and a U-turn onto the runway at 30 knots isn't a takeoff roll, nor the copilot's "wrong runway".
+- **Fuel a long way out:** the projection to landing allows for the burn falling as the fuel goes; an A350 ten
+  hours from Dubai was told it would land with nothing.
+- **The airline's logo** has no white card behind it.
+- **No instruction before the check-in:** departure and the centres give the next climb only once you've called them
+  (one gave "climb and maintain 11,000" the moment you tuned in); a flight quiet on a centre's frequency is called by
+  it after 45 seconds, as departure and approach already did. That also stops a flight being kept at 17,000 with no
+  further climb: it's handed on to the centre.
+- **The STAR flown as filed:** approach no longer vectors you off a STAR that still has fixes to fly (San Juan's BEANO3
+  was read from its second fix, so the flight looked 36 miles off it); a flight on its way to the STAR's first fix is
+  on it.
+- **Procedure names heard in pieces:** "F falls three" is FOLZZ3, "FOL ZZ 3" too, "this NAPR 2" SNAPR2, and "beano
+  three" BEANO3, for the flight's own SID and STAR; a runway said "2, 6, left" is 26L, and "Poppa" is Papa.
+  "Request taxiways" after landing is the taxi in, not a question.
+- **The push held, and why:** a push held for the line at the runway says how many are in it and for which runway,
+  and comes as soon as the line's shorter, not at the time first said.
+- **Weather on the route:** a convective SIGMET is told within 150 miles of it ("about 840 miles ahead" was said),
+  once for the deviations it brings, not again for the next SIGMET along the same way, and the "advise when able
+  direct" reminder comes once.
+- **The good engine start:** with the engines running, the ground crew put GSX's "good engine start" in themselves;
+  GSX's "Interrupt pushback?" page you open isn't closed on you any more (it was, every few seconds), and the crew
+  stop opening GSX's menu for it when GSX only shows that page.
+- **Your arrival gate stays at the arrival:** the gate picked for the destination is no longer sent to GSX at the
+  departure gate ("we've got you at B5, not C9"), and the live map says "the gate you asked for" until ground gives
+  it.
+- **Your traffic asks first:** LocalTC's departures wait for their pushback call when the frequency's busy, rather
+  than pushing without a word.
+- **Flights over the ocean:** a flight in the cruise that drops out of the live feed (few receivers at sea) carries on
+  along its track for up to 15 minutes, not gone on the spot.
+- **The cabin's announcements spread out:** the welcome a minute after the doors, the safety demonstration well after
+  it with the push or the taxi, not five announcements in two minutes. The purser keeps their own voice in the
+  second language (Swiss's German was in another person's voice).
+- **The ATIS out of range:** tuned too far away to hear it, LocalTC says how far it is and how far it reaches.
+- **San Juan's voices:** more Caribbean voices, so its four stations aren't two of the same.
+- **V1 and rotate the same speed:** the copilot says "Rotate" alone.
+- **Arriving where there's no tower:** approach no longer sends you around "not cleared to land" at a field with no
+  tower. Once you're established it gives the wind and sends you to the field's radio where it has one ("contact Tarama
+  Radio 118.6"), else to the advisory frequency, and a landing clearance asked for gets the same, not "unable". The
+  approach is cleared there too, and the visual's "below minimums" is judged by the field's weather, not a cloud
+  you fly through.
+- **Approach's descent on the vectors:** no longer held high by a long way round for the sequence (San Juan kept a
+  flight at 11,000 thirty miles out), and a flight under its altitude on the way in is cleared lower where the ground
+  allows, not told twice to check its altitude and climb back.
+- **Traffic in your way:** a real flight from the live feed flying on top of you (JetBlue on San Juan's final, a tenth
+  of a mile off, level) is sent around if it's behind you on your final, else taken away; LocalTC's own arrivals
+  taxiing in hold short of the runway you're cleared onto (one crossed O'Hare's 27L in front of a takeoff).
+- **Boarding when you ask:** the captain's call starts it, ahead of the turnaround's plan or not (it was refused twice
+  first), and the cabin says if it's early and why; "a boarding starter" and "deep boarding" are heard as what was
+  meant. Speeding up boarding through the cabin no longer gets the ramp answering too.
+- **The flight loading:** the cabin no longer says everyone's on board, nor the copilot asks for the before start
+  checklist, a second in, when the sim's first reading shows every light on; the beacon has to stay on.
+- **The copilot** doesn't set and call out the altitude it already set at the clearance again after takeoff.
+- **A frequency read back with a digit said twice** ("120.555" for 120.55, speech-to-text's) is taken as said.
+- **Accents:** San Juan and the Spanish Caribbean (Puerto Rico, the Dominican Republic, Cuba) have a Caribbean
+  accent, not American, and Thailand a Thai one of its own.
+- **Boarding music:** "Local Forecast - Elevator" is gone; it was lift music.
+- **The copilot flies VFR as VFR:** no more "IFR to Montreal, ready to copy" on a VFR flight. It asks ground for the taxi
+  the VFR way ("VFR to Lachute, westbound, ready to taxi, with information Foxtrot", "VFR local", "closed traffic") once
+  the engine's running, says which way at the hold short line, asks for a VFR clearance only out of Class B or a control
+  zone, calls tower inbound from about ten miles with its position and altitude (nobody hands a VFR flight back to tower),
+  and reports the downwind in the pattern.
+- **"Contact tower when established"** is done on the localiser, not straight after the readback 30 miles out.
+- **Back with a controller left earlier** (Boston sending the flight back to New York), the copilot checks in again; it
+  stayed silent, and the call it meant to make was still waiting six hours later.
+- **The ATIS when the real one is out of date:** LocalTC's own from the METAR keeps the runways the airport was using
+  (Zurich landing 14 and departing 28) where the wind still allows them; it had one runway for everything.
+- **An APU reading stuck at 100%** all through the cruise (the iniBuilds A330's) is no longer taken for a running APU at
+  the gate: the copilot starts it and says it can't read it.
+- **Boarding asked for early** gets the turnaround's reason from the cabin ("boarding's slot opens about 22:40"), and
+  asked again it starts; it got "the ramp can't do that now".
+- **Closed runways on the live map:** the ones the ATIS closes are drawn crossed out on the airport and red on the
+  overview, as a NOTAM's are.
+- **"Foxtruck"** is heard as Foxtrot, and the airport cache no longer fails with "Access is denied" when an airport is
+  written twice at once.
+- **VFR, as pilots actually say it:** "we'd like to pick up a departure to the west" at the ramp is the taxi request (it got
+  "unable"), "request VFR departure" and "we'd like to do some touch and goes" too; flight following asked for on the
+  ground gets a code and departure's frequency (it got "roger"); "request frequency change" and "leave the zone to the
+  west" are approved; a zone transition gets "transition approved, report leaving the zone" (it was taken for an
+  inbound call); "request straight in" gets the straight-in; "abeam the numbers" and "staying in the circuit" are
+  understood.
+- **A VFR plan asks for little:** the rules first, and with VFR no cruise, route or alternate, and the destination may be
+  blank for a local flight (back where it left); the copilot calls it "a local VFR flight", not "Montreal to Montreal".
+- **Taxi out:** ground now clears you across a runway on your route at airports whose data has few hold lines, answers "request
+  to cross" even when the runway number comes out wrong, and sends you to tower when you get there.
+- **The descent left undone:** past the top of descent and still level, the copilot says so and keeps saying so, and ATC tells you to
+  start down and then asks your intentions. A flight still up at cruise isn't sent to a hold thousands of feet below it. Over the
+  ocean toward a destination with no FIR in the data, its own centre takes you, in its own phraseology and named "Control" outside North America.
+- **Live Map NOTAMs:** "TWY N CLSD BTN TWY Z AND TWY M2" closes that stretch, not all of N and Z, so a whole airport's taxiways no
+  longer go red. A closure only for some aircraft is left out.
+- **Headwind A330neo:** the parking brake is read from the aircraft, so the ramp no longer says to set one that's set; "standard" pulls
+  both baro knobs instead of leaving QNH 1013.
+- **Speed up boarding** said to the cabin crew goes to the ramp and GSX.
+- **The copilot leaves the transponder's mode to you** (no TA/RA at takeoff, nor in a checklist): it only sets the code.
+- **The cabin crew member you pick keeps their name;** their accent follows the airline. On Auto the name does too.
+- **The radio log** shows an announcement in a few words ("Safety briefing", the whole text on hover) and once, however many languages
+  it's said in. The voice still says all of it.
+- **Voices start sooner:** long radio lines are made and played a phrase at a time, and the copilot's fixed callouts are made ahead.
+- The flight details row goes away while the flight status with the bar is showing. Visibility is said in metres outside North
+  America, the ATIS says all of a runway list and "short", and TAP's boarding welcome no longer says good morning at night.
+- **The newer GSX, and the older one still:** with an updated GSX the gate ground gives you becomes GSX's stand on the taxi in,
+  matched to GSX's own name for it, and "speed up boarding" or deboarding really does: the passengers go as densely as GSX
+  allows, and its setting is put back when they're done. An older GSX works as before.
+- **The descent in Europe, as Europe does it** (from lorenzobusy-art): "when ready descend FL110, cleared TINI9W arrival"
+  ahead of the top of descent, so you start down at your own (not "descend via" alone, the FAA's); "continue descent
+  3,000 feet" from the next controller, read back like any altitude; and the approach clearance with the altitude to
+  join the final at, never above what the STAR already gave ("descend 3,000 feet, cleared ILS Y runway 35 approach,
+  contact Linate Tower 118.1 when established"). Where an arrival ends is its lowest published restriction from the
+  sim's navdata, not the plan's predicted level at its last fix.
+- **Smaller ATC fixes** (from lorenzobusy-art): an arrival said again is an arrival ("I say again, via the TINI9W
+  arrival", not "departure"); a level reported to radar is answered; on a frequency shared by a clearance and a tower
+  (Malpensa's 120.9) the tower answers in the air; a "direct" only to a fix that exists ("direct knob" is NOBKE).
+- **An emergency can be cancelled** (from lorenzobusy-art): "cancel the emergency", "cancel mayday" gets "roger, emergency
+  cancelled", and the copilot drops it too, instead of taking the words for another emergency.
+- **Taxi routes said as a controller says them** (from lorenzobusy-art): "G1, G2, G3" is "G"; a link on its own stays
+  ("C3, C, C1").
+- **QNH up in the flight levels:** the shipped settings put the transition at 18,000 ft everywhere, so outside North
+  America approach gave the QNH at FL165 and the copilot called 9,000 ft "FL090". Each country's own transition now.
+- **An answer after you've switched:** a controller's reply still to come when you tune the next one isn't heard.
+- **"K and a H three"** read back is K and H3, not a taxiway A.
+- **More voices in continental Europe:** eleven men's and seven women's voices instead of four each, so the purser,
+  ground and the other crews no longer share one. When a region's voices run out, a controller shares with another
+  flight's pilot, never with the crew or another controller.
+- **The cabin's announcements carry on while ATC talks;** only their calls to the flight deck wait.
+- **The descent announcement waits for the descent:** a dip of a few seconds in the climb isn't it, and the copilot
+  checks in "climbing" or "descending" by the last half minute, not the vertical speed of the moment.
+- **"Descent and approach checklist please"** runs the checklist (the "approach" in it was taken for a radio call), "yeah,
+  we can do it" at the end of a muddled answer is a yes, and the answer to a checklist line ("Cabin, ready") is the
+  copilot's, not the purser's.
+- **The Synaptic A220's checklists** say the altimeter and flap setting where they had "()".
+- **The copilot no longer says "set" for an altitude it couldn't set** ("initial FL090 set. I couldn't set 9,000").
+- **Deboarding** starts when asked for in more words ("get the deboarding started", Whisper's "deborings"), and "start
+  boarding" at the gate after the flight is the deboarding.
+- **The ground crew answer a call once** ("catering and water" got two replies) and say "open the forward service door"
+  instead of GSX's "open Forward Service".
 - **Waiting for the parking brake:** a jetway, stairs or push asked for before it's set comes once it is, the way you
   asked for it. The FSLabs' own brake is read, and where a brake can't be read at all, "it's set" is taken at your word.
 - **"Request jetway disconnection"** takes the jetway away instead of asking for it.
 - **GSX services called twice:** one GSX has taken is no longer called again or reported as not responding, and one it
   didn't take is called once more (not the jetway, stairs or push, where a second call would undo them). When GSX stops
   at its first menu page, the crew pick the row themselves.
-- **The push with GSX:** "Pushback complete" only once the aircraft has moved, GSX is told the way ground cleared, its
-  "Interrupt pushback?" page is closed instead of read out, and "until left" is heard as "tail left".
+- **The push with GSX:** "Pushback complete" isn't called until the aircraft has moved, nor "Disconnecting" while GSX waits on which way to go. The crew tell GSX the way ground cleared, unless you said another. GSX's "Interrupt pushback?" page is closed instead of read out, and a question that comes and goes is read once. "Until left" is heard as "tail left".
 - **The ground crew's answers:** several services asked for at once get one answer, cleaners come once the passengers are
   off, the handler is your airline's where GSX lists it, and "which stand are we on?" gets GSX's answer or "I can't see
   it", never a made-up gate.
 - **Cabin crew:** "can we get boarding started?" starts it, the welcome waits until people are walking on, the passenger
   count is GSX's (else the plan's), an A321 is called an A321, and a delay is announced at 15 minutes, not after the push.
-- **Taxi readbacks:** a taxiway named by a number alone ("via C, B, A, 3, 5") and a callsign with a letter in it
-  ("Emirates 98P") no longer make a correct readback "negative".
-- **What you say, written properly:** "119. Decimal 7" is 119.7, "climate" and "crime and maintain" are climb, "via
-  Tango, Charlie" is "via T, C", "gate Delta 1" is "gate D1".
+- **Taxi readbacks:** a taxiway named by a number alone ("via C, B, A, 3, 5" at LaGuardia) and a callsign with a letter in its number ("Emirates 98P") no longer make a correct readback "negative", for you or the copilot.
+- **What you say, written properly:** "119. Decimal 7" is 119.7, "climate" and "crime and maintain" are climb, "via Tango, Charlie" is "via T, C", "gate Delta 1" is "gate D1", "Tower 118, 3" is 118.3, "via A. A3 Bravo" is "via A, A3, B", and "RNAV to JETTI" heard in pieces is written as that. While a takeoff or landing clearance is owed, "clear" with a garbled word after it counts, and the speech recogniser expects the words owed.
 - **ATC:** the tower waits up to 30 seconds for your call before the landing order; the rest of another flight's exchange
   isn't shown once you've tuned away; a model's "Charlie, Bravo, three" for "C, B, 3" is accepted.
-- **The ATIS no longer invents mist:** 9999 in a METAR is 10 km or more, not "9 kilometres, mist", and only what the METAR
-  says is read. One runway for both is "arrival and departure runway 04". No more "1151 min old" with the sim's clock set
-  earlier than the real one.
+- **The ATIS no longer invents mist:** a METAR's 9999 was read as "visibility 9 kilometres, mist" outside the US. It's now 10 km or more, and the weather read out from a METAR is only what the METAR says. Where one runway does both, an ICAO ATIS says "arrival and departure runway 04" instead of "runway in use 04".
 - **Traffic:** an aircraft with its gear up on the way down is told again until it's out, and an arrival taken over on
   its rollout no longer swings round and slides off the runway.
 - **The Daylight theme:** the typing box, buttons, hover colours, errors, the radio log's names and the map's panels are
@@ -256,67 +531,49 @@ a new minor version adds features, a patch fixes them.
   loads, and the plan's on-block time takes over once you've left the gate.
 - **The release notes in another language** stay in English as written, instead of words being cut up.
 - **A translation is no longer thrown away** over how it writes a number ("29,92", "une heure").
-
-### Removed
-- **The ramp frequency setting:** it's always 119.990.
-- **The Center name and Center frequency settings:** the fallback for where no airport or airspace gives a centre stays
-  as a hidden default.
 - **The ground crew read an add-on's own parking brake:** on the FSLabs the sim's own brake variable never shows it set, so the crew kept asking for a brake that was on. They now see it as the copilot does. Where an aircraft's brake can't be read at all, "it's set" is taken at your word.
 - **A push asked for before the brake is set comes once it is**, with the way you asked for, as the jetway and stairs already did. "Can we get a pushback? Tail left please" is one call, not two.
 - **"Request jetway disconnection" takes the jetway away** instead of asking for it, and doesn't need the brake. A typed "parking break" is read as the brake.
 - **A service GSX has taken isn't reported as not responding:** GSX's own variables show it requested long before its Remote API does, so the crew no longer call it twice or say nothing's happened.
 - **A language model can't change what the crew's refusals and facts say:** "Parking brake first" became "Parking brake set", and "the jetway isn't running" became "Jetway's down". Those lines are now said as written. No GPU announcement just because it was already on when the app connected.
-- **Play buttons on the ground crew's calls**, on the radio and on the interphone.
-- **The ATIS no longer invents mist:** a METAR's 9999 was read as "visibility 9 kilometres, mist" outside the US. It's now 10 km or more, and the weather read out from a METAR is only what the METAR says. Where one runway does both, an ICAO ATIS says "arrival and departure runway 04" instead of "runway in use 04".
 - **No more than three of one model on an airport's GA ramps**, where a ramp could fill up with whichever one or two models were picked first.
-- **Quick Settings comes in sections** (Voice & radio, ATC, Crew, Traffic, AI & models) with a box to find a setting. The switches beside the radio box say what they do, "ATC voice" and "Copilot radio", each with a light, and the X beside the typing box is gone.
 - **The Live Map draws the airports around you, with a flight plan or without one:** taxiways, runways and gates were only drawn for a plan's origin and destination, so with no plan the map showed none of it.
 - **Jetway and stairs when GSX stalls:** GSX can accept a call and stop at the first page of its menu. The crew now pick the row themselves, and no longer close the menu under it or say nothing's happened too soon.
-- **COM2 works:** ATC, the ground crew and the copilot follow the radio selected to transmit on. Click COM1 or COM2 in the radio bar to choose, also on an aircraft whose own selector ignores the sim.
-- **ATC in an emergency acts on your intentions:** "we need to land at the nearest airport" gets vectors instead of "say intentions" again, souls and fuel already given aren't asked for, a mayday on the old frequency is answered there, and an engine failure or "immediate landing" counts as an emergency.
 - **The copilot takes "yes, please ask for it"** as the yes to its offer to ask ATC.
 - **ATC understands more of a pilot's own words, with a small local model too:** "good to go" at the runway, "can we go" at the gate, "off the runway, where do you want us". A question about traffic gets an answer, and the destination's tower frequency asked for in the cruise is told, not a handoff to the airport you left.
-- **The language model is kept from more wrong replies:** "clearance granted" for a clearance on request, "continue as filed" at the gate, "unable" to a call that asked nothing, made-up traffic, emergency details left out, and a ground crew waiting for you to tell them you're ready.
-- **The ATC voice and Copilot radio switches look like the checkboxes they are.** The copilot's language model is on Fully LLM by default.
 - **A SID that leaves from the runway you're given:** ATC reads the airport's departure procedures from the sim. A SID filed for another runway is swapped for the one from your runway going the same way, or, with none, you're cleared with radar vectors to your first fix. Birmingham's UNGA1M off runway 15 can't happen any more. The runway itself is still ATC's choice, or the plan's with `enforce_fpln_runways`.
-- **Taxi readbacks:** a taxiway named by a number alone ("via C, B, A, 3, 5" at LaGuardia) and a callsign with a letter in its number ("Emirates 98P") no longer make a correct readback "negative", for you or the copilot.
 - **Right Alt works as a key:** Windows reports it under another name, so it did nothing.
-- **The push with GSX:** "Pushback complete" isn't called until the aircraft has moved, nor "Disconnecting" while GSX waits on which way to go. The crew tell GSX the way ground cleared, unless you said another. GSX's "Interrupt pushback?" page is closed instead of read out, and a question that comes and goes is read once. "Until left" is heard as "tail left".
 - **Ground crew:** several services asked for at once get one answer. A model can't say a jetway is clear while it's still on the door. Cleaners asked for with passengers aboard come once they're off. The handler is your airline's if GSX lists it, else GSX's choice, else the first. On a GSX version that can be told, it's told the gate ATC gave.
 - **Cabin crew:** "can we get boarding started?" starts it. The welcome waits until people are walking on (the music doesn't). The passenger count is GSX's, else the plan's. An A321 is called an A321. The passengers hear about a delay at 15 minutes, not 10, and not once you've pushed.
-- **What you say, written properly:** "119. Decimal 7" is 119.7, "climate" and "crime and maintain" are climb, "via Tango, Charlie" is "via T, C", "gate Delta 1" is "gate D1". While a takeoff or landing clearance is owed, "clear" with a garbled word after it counts, and the speech recogniser expects the words owed.
 - **ATC:** the tower waits up to 30 seconds for your call before giving the landing order. The rest of another flight's exchange isn't shown once you've tuned away. A model's "Charlie, Bravo, three" for "C, B, 3" is accepted, and a correction keeps its "negative". An ATIS no longer calls a METAR "1151 min old" when the sim's clock is set earlier than the real one.
 - **The copilot** turns the seatbelt sign off at the gate, and says it doesn't have the answer to a plain question instead of "say again".
 - **COM2 stays in the radio bar on a narrow window,** and the off-block time isn't lost to a moment of speed while the sim loads. The plan's on-block time (IBT) takes over from it once you've left the gate.
 - **Traffic's gear:** the sim's own reading of each aircraft's gear is checked, and one on the ground or on the way down with its gear up is told again until it's out.
 - **Traffic turning off the runway:** an arrival LocalTC takes over on its rollout no longer swings round and slides sideways off the runway at the moment it's given its way to a stand.
-- **Approach clears you from the STAR's end onto the approach:** LocalTC reads each approach's transitions from the sim. Where a STAR ends at a fix the approach goes on from (Denver's LONGZ at KAILE, the ILS 17R's KAILE transition), you're cleared for the approach on the STAR, with no headings. A STAR filed under another revision than the sim's (LONGZ3 and LONGZ4) is still found. Approach says nothing more once it has handed you to tower.
 - **The runway exit tower gives is one you can make:** chosen by how fast you're rolling, a high-speed exit by the speed it's built for. Denver's M4 is no longer passed over for M2.
-- **Break break:** an urgent call (a go-around, a hold short) comes at once, even straight after ATC's words to you, with "break, break", and your readback of what went before isn't waited for.
 - **The traffic gets the calls you get:** tower sends an arrival to ground as it slows on the runway, and a departure to departure once it's up.
 - **Traffic no longer waits forever for you at your gate:** one taxiing out stopped for a parked aircraft beside its way and held up the line behind it. It waits only for you on its way, and three minutes at most for you standing still.
 - **A hold short not read back:** tower asks "read back hold short instructions" instead of "how do you read?".
 - **The ground crew on the push:** "Tug connected, release parking brake" waits until GSX has the nose wheel up. Let go too early, and you're told to set the brake and release it again. They ask "Confirm good engine start?" and tell GSX on your "yes", even with the engines already running, and "Disconnecting" comes as the tug lets go.
-- **The cabin crew:** each crew member has many more wordings of their own, and lines for the moment: night or morning, a delay, a full or a half-empty cabin, rain, snow, heat or cold, a short or a long flight, a bumpy one. The boarding announcement waits until half the passengers are on. Their words to you on the interphone are to you, not the passengers. They know what they just asked you, and they can't name another airline or say "good morning" in the evening. A second GSX boarding with the real passenger count is the one they announce. "We're up at flight level 380" waits until you are. "Sunny" is never said in the dark.
-- **No more clapping on landing:** the applause and its setting are gone.
 - **The copilot:** no "Engine failure, below V1" on the landing rollout. The seatbelt sign goes off at the gate once the engines are off, not at a stop on the taxiway. No "flaps up" call right after doing what you asked. No "late off block" again after the push, and the altimeter comes out of STD on the way down on the A320neo.
-- **What you say, written properly:** "Tower 118, 3" is 118.3, "via A. A3 Bravo" is "via A, A3, B", and "RNAV to JETTI" heard in pieces is written as that.
 - **Your microphone back after it drops out:** reconnected under a new number by Windows, it's found again, and if it stays silent the same microphone is tried another way.
-- **ATC's long lines start sooner:** a long transmission is played a sentence at a time, the first as soon as it's made. A clearance took 16 seconds from your call to its first word.
 - **Your aircraft on the Live Map:** the sim's menu position (0 N, 90 E) no longer starts the path, so your aircraft is drawn where it is, not a world away.
-- **Join a flight in progress:** start LocalTC (or restart it) in the air, or taxiing in, and press New Flight with your filed plan. The flight carries on from where it is: the clearance, takeoff and SID count as given, your squawk as assigned, your level as cleared. ATC works out who you should be talking to (departure, the centre for where you are, approach, tower) and tells you, and your first call there is the check-in. With the copilot on the radio, it tunes and checks in for you. No "off blocks, 40 minutes late" in the cruise.
 - **No more crash when the microphone drops out:** reopening it restarted the audio system while a voice was playing, and the app vanished. It now waits for the voices to finish, and reopens the microphone without the restart if they don't.
 - **A first call is a check-in:** "Budapest Departure, Airbus November Golf Alpha, good day" went unanswered, so departure never handed the flight on, and it was left on Budapest's frequencies all the way to Germany. A controller you've left behind now sends you on to the one working you, never back.
 - **The runway from your clearance is kept** while the ATIS still has it in use; when it's no longer in use, ground says "runway change". Ground prefers named taxiways, so a route through unnamed apron lanes no longer comes out as just "taxi to the runway".
 - **One push, not seven:** a reading of 0.7 knots after the push no longer flips the phase between parked and pushback.
 - **The cabin crew and ground crew:** Jamie waits while you're on the radio, and leaves a breath between announcements. "Can you start our boarding?" starts it. "Disengage the jetway" takes it away. A push request always gets an answer. The cabin crew talk about the off-block time; the copilot no longer says it too.
 - **The real ATIS, not the sim's first:** with the real ATIS chosen, LocalTC waits up to two minutes for it instead of reading the sim's weather in the meantime. "Direct Fonz" is heard as FAWNS.
-- **A new Getting Started:** a guide in sections, each a short tutorial. Quick start, your first flight call by call from gate to gate, talking on the radio, the copilot, the cabin and ground crews, joining a flight under way, a tour of the app, voices and models, the phone and tracker, troubleshooting, and reporting a problem. It opens on the last section you read, in all ten languages (the example radio calls stay in English, like the radio). A joystick push-to-talk shows as "button 0 on controller 0", not its setting.
 - **A hold that lasts:** "hold at HIGGZ, number 6, delay 10 minutes" was followed 24 seconds later by "cleared out of the hold", and then the same again. Your place in the sequence now moves up no faster than the runway lands aircraft (one every two minutes), and once out of a hold you aren't held again straight away. A new place in the line is "now number 3, expect further clearance 0352"; "revised" only when the time changes.
 - **The copilot after a joined flight:** no "Hey. All set on my side" on the landing roll, and no "ready to taxi" once parked at the destination.
 - **"Doors to manual and cross-check"** is said once, not again in French: it's the crew's order, not an announcement.
 - **A microphone that sends nothing** is found a few seconds into the flight, not at your first press. LocalTC tries each of Windows' ways to it, and tells you to unplug it and plug it back in if none works.
-- **More boarding music:** a different track each flight, and the next one after it ends. "Lobby Time", "Local Forecast - Elevator", "Bossa Antigua", "Smooth Lovin" and "Easy Lemon" join "Airport Lounge" (all Kevin MacLeod, CC BY 3.0).
+
+### Removed
+- **The ramp frequency setting:** it's always 119.990.
+- **The Center name and Center frequency settings:** the fallback for where no airport or airspace gives a centre stays
+  as a hidden default.
+- **No more clapping on landing:** the applause and its setting are gone.
 
 ## [0.5.5] - 2026-11-02
 

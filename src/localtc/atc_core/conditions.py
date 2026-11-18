@@ -22,6 +22,15 @@ The conditions:
   clearance once it's off.
 - ``speed``: "maintain 170 knots until five mile final", kept to until then; well off it, said again.
 - ``expedite``: "cross runway 09, expedite" with an arrival a few miles out.
+- ``behind_departure``: "behind the departing Airbus A320, line up and wait behind" (ICAO).
+- ``taxi_follow``: on the ground, "follow the Boeing 737", until it's gone its way; catching it up, told to slow.
+- ``spacing``: "reduce to 250 for spacing" behind an arrival being caught (``flow``), until the gap's back.
+- ``after_departure``: on final with a departure lined up on the runway, far enough out for it to be gone in time: the
+  landing clearance with it ("traffic Airbus A320 departing ahead"; ICAO "behind the departing ..."), and watched: gone,
+  it's met; still there on short final, the go-around comes as for any occupied runway.
+
+A condition that runs out with ATC still owing the pilot something ends ``needs_instruction``; ``next_instruction`` is the
+one that followed each.
 
 Each is in the session snapshot and the ``AtcConditions`` event for the app, the companion and the replay.
 """
@@ -38,7 +47,11 @@ from localtc.sim_api import OwnshipState, TrafficTarget
 if TYPE_CHECKING:
     from localtc.atc_core.facilities import Facility
 
-STATES = ("active", "satisfied", "expired", "contradicted", "cancelled")
+STATES = ("active", "satisfied", "expired", "contradicted", "needs_instruction", "cancelled")
+OWES_INSTRUCTION = ("behind_landing", "behind_departure", "cross_behind", "follow", "vacate")  # run out, the pilot's still waiting
+LANDING_GONE_AGL = 800.0  # the traffic to line up behind, climbing up here: it's gone around
+TAXI_FOLLOW_CLOSE_M = 60.0  # catching the one followed on the taxiway inside this
+TAXI_FOLLOW_OVER_M = 1500.0  # it's gone its own way this far off
 CONDITION_S = 300.0  # a condition still waiting this long has outlived itself
 BEHIND_LANDING_NM = 3.0  # an arrival this close on final: line up (ICAO) or cross (ICAO) behind it
 CROSS_HOLD_NM = 3.0  # ... and the FAA holds a crossing short of the runway for it
@@ -71,12 +84,14 @@ class Condition:
     detail: str = ""
     reminded: bool = False
     off_since: float | None = None
+    next_instruction: str = ""
 
     def to_json(self) -> dict:
         return {"kind": self.kind, "issued_t": self.issued_t, "instruction": self.instruction_id, "target": self.target,
                 "traffic": self.described, "runway": self.runway,
                 "until_t": None if math.isinf(self.until_t) else self.until_t, "value": self.value,
-                "state": self.state, "ended_t": self.ended_t, "detail": self.detail}
+                "state": self.state, "ended_t": self.ended_t, "detail": self.detail,
+                "next_instruction": self.next_instruction}
 
 
 @dataclass
@@ -99,10 +114,11 @@ class ConditionBook:
         return next((c for c in reversed(self.items) if c.state == "active" and c.kind == kind
                      and (runway is None or c.runway == runway)), None)
 
-    def end(self, condition: Condition, state: str, t: float, detail: str = "") -> None:
+    def end(self, condition: Condition, state: str, t: float, detail: str = "", next_instruction: str = "") -> None:
         if condition.state != "active":
             return
         condition.state, condition.ended_t, condition.detail = state, t, detail
+        condition.next_instruction = next_instruction
         self.changed = True
 
     def to_json(self) -> list[dict]:
@@ -263,8 +279,8 @@ class ConditionsMixin:
         spoke = False
         for c in [c for c in self.conditions.items if c.state == "active"]:
             if t > c.until_t and c.kind not in ("wake", "speed"):
-                self.conditions.end(c, "expired", t, "ran out")
-                if c.kind == "behind_landing":
+                self.conditions.end(c, "needs_instruction" if c.kind in OWES_INSTRUCTION else "expired", t, "ran out")
+                if c.kind in ("behind_landing", "behind_departure"):
                     self._takeoff_hold = None  # tower decides again (``_release``)
                 continue
             handler = getattr(self, f"_watch_{c.kind}", None)
@@ -285,21 +301,65 @@ class ConditionsMixin:
             self.conditions.end(c, "satisfied", own.t, "the traffic has landed")
             self._takeoff_hold = "occupied"  # lining up: the takeoff clearance once it's off the runway
             return False
-        if self._climbing(target) and target.object_id in self._wake_seen_low:
+        geo = self.geometry(self.state.flight.origin)
+        high = geo is not None and target.alt_ft - geo.airport.elev_ft > LANDING_GONE_AGL
+        if self._climbing(target) and (target.object_id in self._wake_seen_low or high):
+            # Gone around (from short final too, not only down low: Fiumicino's line-up waited the five minutes out
+            # behind an A321 that had gone round, and the takeoff clearance never came)
             self.conditions.end(c, "expired", own.t, "the traffic went around")
             self._takeoff_hold = None
             return False
-        geo = self.geometry(self.state.flight.origin)
         if geo is not None and target.alt_ft - geo.airport.elev_ft < 500:
             self._wake_seen_low.add(target.object_id)
         if own.on_ground and own.on_runway and self._lined_up(c.runway) and (tuned := self.state.comms.tuned) is not None:
             # On the runway before the traffic it was to line up behind has passed.
-            self.conditions.end(c, "contradicted", own.t, "lined up before the landing traffic passed")
+            self.conditions.end(c, "contradicted", own.t, "lined up before the landing traffic passed",
+                                next_instruction="tower.hold_position_traffic")
             self._pending_alerts.append(self._alert(own.t, "condition", f"lined up on {c.runway} before {c.described} landed"))
             self._schedule(own.t, "tower.hold_position_traffic", {"message": Phrase(
                 f"{c.described} is still on final", f"{c.described} is still on final")}, tuned, delay=False,
                 expects_readback=False)
             self._takeoff_hold = "occupied"
+            return True
+        return False
+
+    def _conditional_behind_departure(self, t: float, facility: "Facility", runway: str, target: TrafficTarget, *, answering: bool) -> bool:
+        """ICAO: an aircraft just lifting off the departure runway: "behind the departing A320, line up and wait behind"."""
+        if not self.region.icao or self._lined_up(runway) or target.on_ground or not self._climbing(target):
+            return False
+        behind = self._described(target, "departing")
+        self.conditions.add(Condition("behind_departure", t, "tower.luaw_behind", target.object_id, behind.display, runway,
+                                      until_t=t + CONDITION_S))
+        self._takeoff_wait, self._takeoff_hold = runway, "behind"
+        self._schedule(t, "tower.luaw_behind", {"runway": runway, "message": behind}, facility, clearance="line_up", delay=answering,
+                       on_issue=lambda: self._assign(departure_runway=runway))
+        return True
+
+    def _watch_behind_departure(self, c: Condition, own: OwnshipState) -> bool:
+        target = self._traffic.get(c.target) if c.target is not None else None
+        geo = self.geometry(self.state.flight.origin)
+        if target is None:
+            self.conditions.end(c, "expired", own.t, "the traffic is gone")
+            self._takeoff_hold = None
+        elif geo is not None and not target.on_ground and target.alt_ft - geo.airport.elev_ft > 500:
+            self.conditions.end(c, "satisfied", own.t, "it's away")
+            self._takeoff_hold = "occupied"  # lining up: the takeoff clearance once it's lined up and the wake's done
+        return False
+
+    def _watch_taxi_follow(self, c: Condition, own: OwnshipState) -> bool:
+        target = self._traffic.get(c.target) if c.target is not None else None
+        if target is None or not own.on_ground:
+            self.conditions.end(c, "expired", own.t, "the traffic is gone" if target is None else "airborne")
+            return False
+        metres = _nm(own.lat, own.lon, target.lat, target.lon) * 1852.0
+        if not target.on_ground or metres > TAXI_FOLLOW_OVER_M:
+            self.conditions.end(c, "satisfied", own.t, "it's gone its own way")
+            return False
+        tuned = self.state.comms.tuned
+        if metres < TAXI_FOLLOW_CLOSE_M and own.gs_kt > target.gs_kt + 3 and not c.reminded and tuned is not None and tuned.controller == "ground":
+            c.reminded = True
+            self.conditions.end(c, "contradicted", own.t, "catching the traffic followed", next_instruction="ground.follow_close")
+            self._schedule(own.t, "ground.follow_close", {}, tuned, delay=False, expects_readback=False)
             return True
         return False
 
@@ -324,7 +384,8 @@ class ConditionsMixin:
         if tuned is None or tuned.controller != "ground":
             return False
         self.conditions.end(c, "satisfied" if target is not None else "expired", own.t,
-                            "the traffic has landed" if target is not None else "the traffic is gone")
+                            "the traffic has landed" if target is not None else "the traffic is gone",
+                            next_instruction="ground.cross_runway")
         self._crossed.add(c.runway)
         self._crossing = c.runway
         self._schedule(own.t, "ground.cross_runway", {"runway": c.value or c.runway.split("/")[0]}, tuned, delay=False)
@@ -344,7 +405,7 @@ class ConditionsMixin:
         if blocked is None or tuned is None or tuned.controller != "tower":
             return False  # nothing coming after all: the clearance stands
         _, target, miles = blocked
-        self.conditions.end(c, "contradicted", own.t, "not rolling in time")
+        self.conditions.end(c, "contradicted", own.t, "not rolling in time", next_instruction="tower.cancel_takeoff")
         self.state.clearances.pop("takeoff", None)
         self._takeoff_wait, self._takeoff_hold = c.runway, "occupied" if self._lined_up(c.runway) else "arrival"
         n = max(1, round(miles))
@@ -362,8 +423,12 @@ class ConditionsMixin:
     def _watch_follow(self, c: Condition, own: OwnshipState) -> bool:
         target = self._traffic.get(c.target) if c.target is not None else None
         if target is None:
-            self.conditions.end(c, "expired", own.t, "the traffic is gone")
-            return False
+            tuned = self.state.comms.tuned
+            told = tuned is not None and tuned.controller in ("tower", "approach") and not own.on_ground
+            self.conditions.end(c, "expired", own.t, "the traffic is gone", next_instruction="common.traffic_gone" if told else "")
+            if told:  # (following something that isn't there any more: they need to know)
+                self._schedule(own.t, "common.traffic_gone", {}, tuned, delay=False, expects_readback=False)
+            return told
         if target.on_ground and target.gs_kt < LANDED_KT:
             self.conditions.end(c, "satisfied", own.t, "the traffic has landed")
             return False
@@ -381,6 +446,41 @@ class ConditionsMixin:
             return True
         return False
 
+    def _departing_ahead(self, own: OwnshipState, runway: str | None, target: TrafficTarget) -> bool:
+        """``target``, on the runway this flight's landing on, is a departure at its start, and there's time for it to
+        go: the landing clearance can come now, with it."""
+        ctx = self.tracker.context
+        if runway is None or ctx.final is None or ctx.final.distance_nm < AFTER_DEPARTURE_NM                 or self.conditions.active("after_departure") is not None or "emergency" in self.state.flags:
+            return False
+        geo = self.geometry(self.state.flight.destination)
+        end = geo.end(runway) if geo is not None else None
+        if end is None:
+            return False
+        x, y = geo.xy(target.lat, target.lon)
+        ux, uy = math.sin(math.radians(end.heading_true)), math.cos(math.radians(end.heading_true))
+        along = (x - end.threshold[0]) * ux + (y - end.threshold[1]) * uy
+        aligned = abs(((target.hdg_true - end.heading_true + 540) % 360) - 180) < 30
+        return aligned and -100 <= along <= DEPARTURE_START_M
+
+    def _clear_after_departure(self, t: float, own: OwnshipState, facility: "Facility", runway: str, target: TrafficTarget) -> None:
+        kind = self._aircraft(target)
+        message = Phrase(kind.display, kind.spoken) if kind is not None else Phrase("traffic", "traffic")
+        self.conditions.add(Condition("after_departure", t, "tower.land_after_departure", target.object_id,
+                                      self._described(target, "departing").display, runway, until_t=t + CONDITION_S))
+        self._schedule(t, "tower.land_after_departure", {"runway": runway, "message": message,
+                                                         "wind": self._surface_wind(own, self.state.flight.destination)},
+                       facility, delay=False, clearance="landing", on_issue=lambda: self._assign(arrival_runway=runway))
+
+    def _watch_after_departure(self, c: Condition, own: OwnshipState) -> bool:
+        target = self._traffic.get(c.target) if c.target is not None else None
+        if target is None or not target.on_ground or target.gs_kt > 100:
+            self.conditions.end(c, "satisfied", own.t, "the departure's gone")
+        elif self._going_around:
+            self.conditions.end(c, "contradicted", own.t, "still on the runway: sent around", next_instruction="tower.go_around_traffic")
+        elif own.on_ground:
+            self.conditions.end(c, "expired", own.t, "landed")
+        return False
+
     def _watch_vacate(self, c: Condition, own: OwnshipState) -> bool:
         if "landing" in self.state.clearances:
             self.conditions.end(c, "satisfied", own.t, "the runway's clear: cleared to land")
@@ -394,7 +494,9 @@ class ConditionsMixin:
             self.conditions.end(c, "expired", own.t, "a new speed" if self.state.assignments.speed_kt != c.value else "")
             return False
         tuned = self.state.comms.tuned
-        if tuned is not None and tuned.controller == "tower":
+        handed = self._last_handoff is not None and self._last_handoff[2] is not None \
+            and self._last_handoff[2].controller == "tower"  # (read back, the radio not changed over yet)
+        if (tuned is not None and tuned.controller == "tower") or handed:
             # Handed to tower, approach's speed is done with: tower's first words were "reduce speed to 180" before the
             # pilot had even called, and again on final.
             self.conditions.end(c, "expired", own.t, "with tower")
@@ -420,6 +522,8 @@ class ConditionsMixin:
         return False
 
 
+AFTER_DEPARTURE_NM = 3.0  # on final this far out at least, with a departure starting its roll: cleared with it
+DEPARTURE_START_M = 900.0  # ... on the runway's first part, lined up
 LANDING_OR_ROLL_KT = 200.0  # (on the ground at all: landed)
 
 

@@ -24,12 +24,12 @@ CONTRACTIONS = {
     "MM": "middle marker", "MULT": "multiple", "NM": "miles", "NOTAMS": "NOTAMs", "OM": "outer marker",
     "OPS": "operations", "OTS": "out of service", "OVR": "over", "PARL": "parallel", "PRCDS": "procedures",
     "PROC": "procedure", "REIL": "runway end identifier lights", "RWY": "runway", "RWYS": "runways",
-    "SFC": "surface", "SIMUL": "simultaneous", "TFR": "temporary flight restriction", "THLD": "threshold",
+    "SFC": "surface", "SHRT": "short", "SIMUL": "simultaneous", "TFR": "temporary flight restriction", "THLD": "threshold",
     "TWR": "tower", "TWY": "taxiway", "TWYS": "taxiways", "U/S": "unserviceable", "VCNTY": "vicinity",
     "VEH": "vehicles", "WIP": "work in progress", "WI": "within", "READBACK": "read back", "NUMEROUS": "numerous",
 }
 # Words that keep their letters: said as they're written ("ILS", "TACAN")
-KEEP = {"ILS", "RNAV", "GPS", "VOR", "DME", "TACAN", "NDB", "SIGMET", "AIRMET", "PAPI", "VASI", "NOTAMS", "VFR", "IFR",
+KEEP = {"ILS", "RNAV", "GPS", "VOR", "DME", "TACAN", "NDB", "SIGMET", "AIRMET", "PAPI", "VASI", "NOTAMS", "VFR", "IFR", "AIP",
         "STAR", "SID", "RVR", "ATIS", "ASDE", "LAHSO", "UNICOM", "CTAF", "PIREP", "PIREPS", "MSL"}
 # The words a single letter after them is a taxiway (or a SIGMET) by
 LETTER_AFTER = {"SIGMET", "AIRMET", "INFO", "AND", "OR", "BTN", "EXIT", "TO"}
@@ -45,6 +45,7 @@ def say(remark: str) -> tuple[str, str]:
     said: list[str] = []
     before = ""
     in_list = False  # a taxiway list ("TWY Y, S, D"): every name in it a taxiway
+    runways_on = False  # a runway list ("RWYS 8L, 26R CLSD"): the second a runway too
     for i, tok in enumerate(tokens):
         nxt = tokens[i + 1] if i + 1 < len(tokens) else ""
         if tok in ",;:":
@@ -52,11 +53,14 @@ def say(remark: str) -> tuple[str, str]:
                 shown[-1] += tok
                 said[-1] += tok
             continue
-        if before in RUNWAY_WORDS and re.fullmatch(r"\d{1,2}[LRC]?", tok):
+        if (before in RUNWAY_WORDS or runways_on) and re.fullmatch(r"\d{1,2}[LRC]?", tok):
             number = tok.rstrip("LRC")
             ident = f"{int(number):02d}{tok[len(number):]}"
             shown.append(tok)
             said.append(speech.runway(ident))
+        elif re.fullmatch(r"\d{1,3}/\d{1,3}", tok) and before in ("SUPPLEMENT", "SUP", "AIC"):
+            shown.append(tok)  # "AIP supplement 55/26": fifty-five slash twenty-six
+            said.append(" slash ".join(speech.number_words(int(p)) for p in tok.split("/")))
         elif tok.isdigit() and nxt == "FT":
             shown.append(f"{int(tok):,}")
             said.append(speech.feet(int(tok)))
@@ -80,6 +84,7 @@ def say(remark: str) -> tuple[str, str]:
             shown.append(tok.lower())
             said.append(tok.lower())
         in_list = (before in TAXIWAY_WORDS or in_list) and i + 1 < len(tokens) and tokens[i + 1] == ","
+        runways_on = (before in RUNWAY_WORDS or runways_on) and bool(re.fullmatch(r"\d{1,2}[LRC]?", tok)) and nxt == ","
         before = tok
     line = " ".join(shown)
     return line[:1].upper() + line[1:], " ".join(said)

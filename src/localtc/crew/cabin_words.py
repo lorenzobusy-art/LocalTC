@@ -4,7 +4,7 @@ script knows, and what they answer. Their announcements are the airline's langua
 
 import re
 
-from localtc.spoken_numbers import plain
+from localtc.spoken_numbers import near_words, plain
 
 # English -> what's said for it (without accents, as ``plain`` leaves it, which is applied to these too).
 HEARD: dict[str, dict[str, str]] = {
@@ -65,34 +65,34 @@ DRINKS: dict[str, dict[str, str]] = {
 }
 
 REPLIES: dict[str, dict[str, str]] = {
-    "de": {"ground_boarding": "Danke, Captain. Wir sind bereit, das Boarding beginnt.", "ground_deboarding": "Danke, Captain, wir lassen alle aussteigen.", "ground_not_yet": "Das geht gerade noch nicht, Captain.", "drink": "Gerne. {drink} kommt sofort.", "drink_both": "Zweimal {drink}, kommt sofort.", "drink_delivered": "Hier ist Ihr {drink}, Captain. Vorsicht, heiß.", "drink_delivered_cold": "Hier ist Ihr {drink}, Captain.", "no_drink": "Kein Problem. Rufen Sie einfach, wenn Sie etwas brauchen.", "meal": "Gerne. Ich bringe Ihr Essen gleich nach vorne.", "meal_delivered": "Hier ist Ihr Essen, Captain. Guten Appetit.",
+    "de": {"ground_early": "Wir beginnen jetzt mit dem Boarding, Captain, etwas früher als geplant.", "ground_hurry": "Mache ich, Captain, ich bitte das Vorfeld, sich zu beeilen.", "ground_boarding": "Danke, Captain. Wir sind bereit, das Boarding beginnt.", "ground_deboarding": "Danke, Captain, wir lassen alle aussteigen.", "ground_not_yet": "Das geht gerade noch nicht, Captain.", "drink": "Gerne. {drink} kommt sofort.", "drink_both": "Zweimal {drink}, kommt sofort.", "drink_delivered": "Hier ist Ihr {drink}, Captain. Vorsicht, heiß.", "drink_delivered_cold": "Hier ist Ihr {drink}, Captain.", "no_drink": "Kein Problem. Rufen Sie einfach, wenn Sie etwas brauchen.", "meal": "Gerne. Ich bringe Ihr Essen gleich nach vorne.", "meal_delivered": "Hier ist Ihr Essen, Captain. Guten Appetit.",
            "boarding_left": "Noch etwa {left} Minuten Boarding, Captain.", "on_time": "Bisher sind wir pünktlich, Captain.", "behind": "Wir sind {minutes} Minuten hinter dem Plan, Captain.", "no_schedule": "Ich habe keine passende Abflugzeit für heute, Captain.", "status": "Alles gut hier hinten. {pax} Passagiere, alles ruhig.", "count": "Wir haben heute {pax} Passagiere an Bord.", "prepare_landing": "Wird gemacht. Ich melde mich, wenn die Kabine gesichert ist.", "prepare_takeoff": "Verstanden. Ich melde mich, wenn wir gesichert sind.", "already_secure": "Die Kabine ist schon gesichert, Captain.",
            "turbulence": "Danke für den Hinweis. Ich mache eine Durchsage und wir stoppen den Service.", "delay": "Verstanden. Ich sage den Passagieren Bescheid.", "relay": "Wird gemacht.", "thanks": "Gern geschehen!", "who": "Hier ist {name}, heute Ihre Kabinenchefin.", "service_start": "In Ordnung, wir beginnen jetzt mit dem Service.", "safety_done": "Die Sicherheitsvorführung haben wir schon gemacht, Captain.", "hello": "Hallo Captain, hier ist {name}. Was kann ich für Sie tun?", "landing_feedback": "Ehrlich? {verdict}", "unclear": "Entschuldigung, Captain, das habe ich nicht ganz verstanden. Noch einmal bitte?"},
-    "fr": {"ground_boarding": "Merci, commandant. Nous sommes prêts, l'embarquement commence.", "ground_deboarding": "Merci, commandant, nous faisons descendre tout le monde.", "ground_not_yet": "Ce n'est pas encore possible, commandant.", "drink": "Bien sûr. Un {drink}, tout de suite.", "drink_both": "Deux {drink}, tout de suite.", "drink_delivered": "Voici votre {drink}, commandant. Attention, c'est chaud.", "drink_delivered_cold": "Voici votre {drink}, commandant.", "no_drink": "Pas de problème. Appelez-moi si vous changez d'avis.", "meal": "Bien sûr. Je vous apporte vos repas tout de suite.", "meal_delivered": "Voici vos repas, commandant. Bon appétit.",
+    "fr": {"ground_early": "On commence l'embarquement, commandant, un peu plus tôt que prévu.", "ground_hurry": "Entendu, commandant, je demande à la piste d'accélérer.", "ground_boarding": "Merci, commandant. Nous sommes prêts, l'embarquement commence.", "ground_deboarding": "Merci, commandant, nous faisons descendre tout le monde.", "ground_not_yet": "Ce n'est pas encore possible, commandant.", "drink": "Bien sûr. Un {drink}, tout de suite.", "drink_both": "Deux {drink}, tout de suite.", "drink_delivered": "Voici votre {drink}, commandant. Attention, c'est chaud.", "drink_delivered_cold": "Voici votre {drink}, commandant.", "no_drink": "Pas de problème. Appelez-moi si vous changez d'avis.", "meal": "Bien sûr. Je vous apporte vos repas tout de suite.", "meal_delivered": "Voici vos repas, commandant. Bon appétit.",
            "boarding_left": "Encore environ {left} minutes d'embarquement, commandant.", "on_time": "Nous sommes à l'heure pour l'instant, commandant.", "behind": "Nous avons {minutes} minutes de retard sur le plan, commandant.", "no_schedule": "Je n'ai pas d'heure de départ valable aujourd'hui, commandant.", "status": "Tout va bien ici. {pax} passagers, tout est calme.", "count": "Nous avons {pax} passagers à bord aujourd'hui.", "prepare_landing": "Entendu. Je vous appelle quand la cabine est prête.", "prepare_takeoff": "Compris. Je vous préviens quand nous sommes prêts.", "already_secure": "La cabine est déjà prête, commandant.",
            "turbulence": "Merci de nous prévenir. Je fais une annonce et nous arrêtons le service.", "delay": "Compris. Je préviens les passagers.", "relay": "Entendu.", "thanks": "Je vous en prie !", "who": "C'est {name}, votre chef de cabine aujourd'hui.", "service_start": "D'accord, nous commençons le service.", "safety_done": "La démonstration de sécurité est déjà faite, commandant.", "hello": "Bonjour commandant, c'est {name}. Que puis-je faire pour vous ?", "landing_feedback": "Honnêtement ? {verdict}", "unclear": "Pardon, commandant, je n'ai pas bien compris. Vous pouvez répéter ?"},
-    "es": {"ground_boarding": "Gracias, comandante. Estamos listos, empezamos el embarque.", "ground_deboarding": "Gracias, comandante, vamos a desembarcar a todos.", "ground_not_yet": "Eso todavía no se puede, comandante.", "drink": "Claro. Un {drink}, ahora mismo.", "drink_both": "Dos de {drink}, ahora mismo.", "drink_delivered": "Aquí tiene su {drink}, comandante. Cuidado, que quema.", "drink_delivered_cold": "Aquí tiene su {drink}, comandante.", "no_drink": "Sin problema. Llámeme si cambia de idea.", "meal": "Claro. Le subo las comidas enseguida.", "meal_delivered": "Aquí tiene las comidas, comandante. Buen provecho.",
+    "es": {"ground_early": "Empezamos el embarque ahora, comandante, un poco antes de lo previsto.", "ground_hurry": "De acuerdo, comandante, le pido a rampa que lo acelere.", "ground_boarding": "Gracias, comandante. Estamos listos, empezamos el embarque.", "ground_deboarding": "Gracias, comandante, vamos a desembarcar a todos.", "ground_not_yet": "Eso todavía no se puede, comandante.", "drink": "Claro. Un {drink}, ahora mismo.", "drink_both": "Dos de {drink}, ahora mismo.", "drink_delivered": "Aquí tiene su {drink}, comandante. Cuidado, que quema.", "drink_delivered_cold": "Aquí tiene su {drink}, comandante.", "no_drink": "Sin problema. Llámeme si cambia de idea.", "meal": "Claro. Le subo las comidas enseguida.", "meal_delivered": "Aquí tiene las comidas, comandante. Buen provecho.",
            "boarding_left": "Quedan unos {left} minutos de embarque, comandante.", "on_time": "De momento vamos en hora, comandante.", "behind": "Vamos {minutes} minutos por detrás del plan, comandante.", "no_schedule": "No tengo una hora de salida válida para hoy, comandante.", "status": "Todo bien aquí atrás. {pax} pasajeros, todo tranquilo.", "count": "Hoy llevamos {pax} pasajeros a bordo.", "prepare_landing": "De acuerdo. Le llamo cuando la cabina esté asegurada.", "prepare_takeoff": "Entendido. Le aviso cuando estemos asegurados.", "already_secure": "La cabina ya está asegurada, comandante.",
            "turbulence": "Gracias por avisar. Haré un anuncio y paramos el servicio.", "delay": "Entendido. Se lo digo a los pasajeros.", "relay": "De acuerdo.", "thanks": "¡De nada!", "who": "Soy {name}, su jefe de cabina hoy.", "service_start": "Vale, empezamos el servicio.", "safety_done": "La demostración de seguridad ya está hecha, comandante.", "hello": "Hola comandante, soy {name}. ¿En qué puedo ayudarle?", "landing_feedback": "¿Sinceramente? {verdict}", "unclear": "Perdón, comandante, no le he entendido bien. ¿Puede repetir?"},
-    "it": {"ground_boarding": "Grazie, comandante. Siamo pronti, iniziamo l'imbarco.", "ground_deboarding": "Grazie, comandante, facciamo scendere tutti.", "ground_not_yet": "Non è ancora possibile, comandante.", "drink": "Certo. Un {drink}, subito.", "drink_both": "Due {drink}, subito.", "drink_delivered": "Ecco il suo {drink}, comandante. Attenzione, scotta.", "drink_delivered_cold": "Ecco il suo {drink}, comandante.", "no_drink": "Nessun problema. Mi chiami se cambia idea.", "meal": "Certo. Le porto subito i pasti.", "meal_delivered": "Ecco i pasti, comandante. Buon appetito.",
+    "it": {"ground_early": "Iniziamo l'imbarco adesso, comandante, un po' prima del previsto.", "ground_hurry": "Va bene, comandante, chiedo alla rampa di accelerare.", "ground_boarding": "Grazie, comandante. Siamo pronti, iniziamo l'imbarco.", "ground_deboarding": "Grazie, comandante, facciamo scendere tutti.", "ground_not_yet": "Non è ancora possibile, comandante.", "drink": "Certo. Un {drink}, subito.", "drink_both": "Due {drink}, subito.", "drink_delivered": "Ecco il suo {drink}, comandante. Attenzione, scotta.", "drink_delivered_cold": "Ecco il suo {drink}, comandante.", "no_drink": "Nessun problema. Mi chiami se cambia idea.", "meal": "Certo. Le porto subito i pasti.", "meal_delivered": "Ecco i pasti, comandante. Buon appetito.",
            "boarding_left": "Ancora circa {left} minuti di imbarco, comandante.", "on_time": "Per ora siamo in orario, comandante.", "behind": "Siamo {minutes} minuti indietro sul piano, comandante.", "no_schedule": "Non ho un orario di partenza valido per oggi, comandante.", "status": "Tutto bene qui dietro. {pax} passeggeri, tutto tranquillo.", "count": "Oggi abbiamo {pax} passeggeri a bordo.", "prepare_landing": "D'accordo. La chiamo quando la cabina è pronta.", "prepare_takeoff": "Ricevuto. La avviso quando siamo pronti.", "already_secure": "La cabina è già pronta, comandante.",
            "turbulence": "Grazie dell'avviso. Faccio un annuncio e fermiamo il servizio.", "delay": "Ricevuto. Lo dico ai passeggeri.", "relay": "D'accordo.", "thanks": "Prego!", "who": "Sono {name}, oggi il suo capo cabina.", "service_start": "Va bene, iniziamo il servizio.", "safety_done": "La dimostrazione di sicurezza è già fatta, comandante.", "hello": "Salve comandante, sono {name}. Cosa posso fare per lei?", "landing_feedback": "Sinceramente? {verdict}", "unclear": "Mi scusi, comandante, non ho capito bene. Può ripetere?"},
-    "pt": {"ground_boarding": "Obrigado, comandante. Estamos prontos, começamos o embarque.", "ground_deboarding": "Obrigado, comandante, vamos desembarcar todos.", "ground_not_yet": "Isso ainda não é possível, comandante.", "drink": "Claro. Um {drink}, já a seguir.", "drink_both": "Dois de {drink}, já a seguir.", "drink_delivered": "Aqui está o seu {drink}, comandante. Cuidado, está quente.", "drink_delivered_cold": "Aqui está o seu {drink}, comandante.", "no_drink": "Sem problema. Chame-me se mudar de ideias.", "meal": "Claro. Levo-lhe as refeições já a seguir.", "meal_delivered": "Aqui estão as refeições, comandante. Bom apetite.",
+    "pt": {"ground_early": "Começamos o embarque agora, comandante, um pouco antes do previsto.", "ground_hurry": "Com certeza, comandante, peço à rampa para acelerar.", "ground_boarding": "Obrigado, comandante. Estamos prontos, começamos o embarque.", "ground_deboarding": "Obrigado, comandante, vamos desembarcar todos.", "ground_not_yet": "Isso ainda não é possível, comandante.", "drink": "Claro. Um {drink}, já a seguir.", "drink_both": "Dois de {drink}, já a seguir.", "drink_delivered": "Aqui está o seu {drink}, comandante. Cuidado, está quente.", "drink_delivered_cold": "Aqui está o seu {drink}, comandante.", "no_drink": "Sem problema. Chame-me se mudar de ideias.", "meal": "Claro. Levo-lhe as refeições já a seguir.", "meal_delivered": "Aqui estão as refeições, comandante. Bom apetite.",
            "boarding_left": "Faltam cerca de {left} minutos de embarque, comandante.", "on_time": "Por agora estamos a horas, comandante.", "behind": "Estamos {minutes} minutos atrás do plano, comandante.", "no_schedule": "Não tenho uma hora de partida válida para hoje, comandante.", "status": "Tudo bem aqui atrás. {pax} passageiros, tudo calmo.", "count": "Hoje temos {pax} passageiros a bordo.", "prepare_landing": "Combinado. Chamo quando a cabine estiver segura.", "prepare_takeoff": "Entendido. Aviso quando estivermos seguros.", "already_secure": "A cabine já está segura, comandante.",
            "turbulence": "Obrigado pelo aviso. Faço um anúncio e paramos o serviço.", "delay": "Entendido. Digo aos passageiros.", "relay": "Combinado.", "thanks": "De nada!", "who": "Sou {name}, o seu chefe de cabine hoje.", "service_start": "Está bem, começamos o serviço.", "safety_done": "A demonstração de segurança já está feita, comandante.", "hello": "Olá comandante, sou {name}. Em que posso ajudar?", "landing_feedback": "Sinceramente? {verdict}", "unclear": "Desculpe, comandante, não percebi bem. Pode repetir?"},
-    "nl": {"ground_boarding": "Dank je, captain. We zijn klaar, het boarden begint.", "ground_deboarding": "Dank je, captain, we laten iedereen uitstappen.", "ground_not_yet": "Dat kan nog niet, captain.", "drink": "Natuurlijk. {drink} komt eraan.", "drink_both": "Twee keer {drink}, komt eraan.", "drink_delivered": "Hier is je {drink}, captain. Pas op, het is heet.", "drink_delivered_cold": "Hier is je {drink}, captain.", "no_drink": "Geen probleem. Roep maar als je je bedenkt.", "meal": "Natuurlijk. Ik breng de maaltijden zo.", "meal_delivered": "Hier zijn de maaltijden, captain. Eet smakelijk.",
+    "nl": {"ground_early": "We beginnen nu met boarden, captain, iets eerder dan gepland.", "ground_hurry": "Doe ik, captain, ik vraag het platform om op te schieten.", "ground_boarding": "Dank je, captain. We zijn klaar, het boarden begint.", "ground_deboarding": "Dank je, captain, we laten iedereen uitstappen.", "ground_not_yet": "Dat kan nog niet, captain.", "drink": "Natuurlijk. {drink} komt eraan.", "drink_both": "Twee keer {drink}, komt eraan.", "drink_delivered": "Hier is je {drink}, captain. Pas op, het is heet.", "drink_delivered_cold": "Hier is je {drink}, captain.", "no_drink": "Geen probleem. Roep maar als je je bedenkt.", "meal": "Natuurlijk. Ik breng de maaltijden zo.", "meal_delivered": "Hier zijn de maaltijden, captain. Eet smakelijk.",
            "boarding_left": "Nog ongeveer {left} minuten boarden, captain.", "on_time": "Tot nu toe liggen we op schema, captain.", "behind": "We lopen {minutes} minuten achter op het plan, captain.", "no_schedule": "Ik heb geen geldige vertrektijd voor vandaag, captain.", "status": "Alles goed hier achter. {pax} passagiers, lekker rustig.", "count": "We hebben vandaag {pax} passagiers aan boord.", "prepare_landing": "Komt goed. Ik roep je als de cabine veilig is.", "prepare_takeoff": "Begrepen. Ik laat het weten als we klaar zijn.", "already_secure": "De cabine is al veilig, captain.",
            "turbulence": "Bedankt voor de waarschuwing. Ik doe een omroep en we stoppen de service.", "delay": "Begrepen. Ik laat het de passagiers weten.", "relay": "Komt goed.", "thanks": "Graag gedaan!", "who": "Met {name}, vandaag je purser.", "service_start": "Oké, we beginnen met de service.", "safety_done": "De veiligheidsdemonstratie is al gedaan, captain.", "hello": "Hallo captain, met {name}. Wat kan ik voor je doen?", "landing_feedback": "Eerlijk? {verdict}", "unclear": "Sorry, captain, dat heb ik niet goed verstaan. Kun je het herhalen?"},
-    "pl": {"ground_boarding": "Dziękuję, kapitanie. Jesteśmy gotowi, zaczynamy boarding.", "ground_deboarding": "Dziękuję, kapitanie, wypuszczamy wszystkich.", "ground_not_yet": "Jeszcze nie można tego zrobić, kapitanie.", "drink": "Oczywiście. {drink}, już niosę.", "drink_both": "Dwa razy {drink}, już niosę.", "drink_delivered": "Proszę: {drink}, kapitanie. Uwaga, gorące.", "drink_delivered_cold": "Proszę: {drink}, kapitanie.", "no_drink": "Nie ma sprawy. Proszę zawołać, gdyby pan zmienił zdanie.", "meal": "Oczywiście. Zaraz przyniosę posiłki.", "meal_delivered": "Proszę, posiłki, kapitanie. Smacznego.",
+    "pl": {"ground_early": "Zaczynamy boarding teraz, kapitanie, trochę wcześniej niż w planie.", "ground_hurry": "Oczywiście, kapitanie, poproszę obsługę naziemną o przyspieszenie.", "ground_boarding": "Dziękuję, kapitanie. Jesteśmy gotowi, zaczynamy boarding.", "ground_deboarding": "Dziękuję, kapitanie, wypuszczamy wszystkich.", "ground_not_yet": "Jeszcze nie można tego zrobić, kapitanie.", "drink": "Oczywiście. {drink}, już niosę.", "drink_both": "Dwa razy {drink}, już niosę.", "drink_delivered": "Proszę: {drink}, kapitanie. Uwaga, gorące.", "drink_delivered_cold": "Proszę: {drink}, kapitanie.", "no_drink": "Nie ma sprawy. Proszę zawołać, gdyby pan zmienił zdanie.", "meal": "Oczywiście. Zaraz przyniosę posiłki.", "meal_delivered": "Proszę, posiłki, kapitanie. Smacznego.",
            "boarding_left": "Jeszcze około {left} minut boardingu, kapitanie.", "on_time": "Na razie jesteśmy na czas, kapitanie.", "behind": "Mamy {minutes} minut opóźnienia względem planu, kapitanie.", "no_schedule": "Nie mam dziś ważnej godziny odlotu, kapitanie.", "status": "Tutaj wszystko dobrze. Pasażerów: {pax}, spokojnie.", "count": "Pasażerów na pokładzie dzisiaj: {pax}.", "prepare_landing": "Już się robi. Zadzwonię, gdy kabina będzie gotowa.", "prepare_takeoff": "Zrozumiałam. Dam znać, gdy będziemy gotowi.", "already_secure": "Kabina jest już gotowa, kapitanie.",
            "turbulence": "Dziękuję za ostrzeżenie. Zrobię zapowiedź i przerwiemy serwis.", "delay": "Zrozumiałam. Powiem pasażerom.", "relay": "Już się robi.", "thanks": "Proszę bardzo!", "who": "Tu {name}, szef pokładu na dzisiaj.", "service_start": "Dobrze, zaczynamy serwis.", "safety_done": "Pokaz bezpieczeństwa już był, kapitanie.", "hello": "Dzień dobry, kapitanie, tu {name}. W czym mogę pomóc?", "landing_feedback": "Szczerze? {verdict}", "unclear": "Przepraszam, kapitanie, nie dosłyszałam. Może pan powtórzyć?"},
-    "sv": {"ground_boarding": "Tack, kapten. Vi är redo, boardingen börjar.", "ground_deboarding": "Tack, kapten, vi låter alla gå av.", "ground_not_yet": "Det går inte riktigt än, kapten.", "drink": "Självklart. {drink} kommer strax.", "drink_both": "Två {drink}, kommer strax.", "drink_delivered": "Här är ditt {drink}, kapten. Försiktigt, det är varmt.", "drink_delivered_cold": "Här är ditt {drink}, kapten.", "no_drink": "Inga problem. Ropa om du ändrar dig.", "meal": "Självklart. Jag kommer strax med maten.", "meal_delivered": "Här är maten, kapten. Smaklig måltid.",
+    "sv": {"ground_early": "Vi börjar boardingen nu, kapten, lite tidigare än planerat.", "ground_hurry": "Det ordnar jag, kapten, jag ber rampen skynda på.", "ground_boarding": "Tack, kapten. Vi är redo, boardingen börjar.", "ground_deboarding": "Tack, kapten, vi låter alla gå av.", "ground_not_yet": "Det går inte riktigt än, kapten.", "drink": "Självklart. {drink} kommer strax.", "drink_both": "Två {drink}, kommer strax.", "drink_delivered": "Här är ditt {drink}, kapten. Försiktigt, det är varmt.", "drink_delivered_cold": "Här är ditt {drink}, kapten.", "no_drink": "Inga problem. Ropa om du ändrar dig.", "meal": "Självklart. Jag kommer strax med maten.", "meal_delivered": "Här är maten, kapten. Smaklig måltid.",
            "boarding_left": "Ungefär {left} minuter boarding kvar, kapten.", "on_time": "Hittills ligger vi i tid, kapten.", "behind": "Vi ligger {minutes} minuter efter planen, kapten.", "no_schedule": "Jag har ingen giltig avgångstid för i dag, kapten.", "status": "Allt bra här bak. {pax} passagerare, lugnt och skönt.", "count": "Vi har {pax} passagerare ombord i dag.", "prepare_landing": "Absolut. Jag ropar när kabinen är klar.", "prepare_takeoff": "Uppfattat. Jag säger till när vi är klara.", "already_secure": "Kabinen är redan klar, kapten.",
            "turbulence": "Tack för varningen. Jag gör ett utrop och vi stoppar servicen.", "delay": "Uppfattat. Jag säger till passagerarna.", "relay": "Absolut.", "thanks": "Varsågod!", "who": "Det är {name}, din purser i dag.", "service_start": "Okej, vi börjar med servicen.", "safety_done": "Säkerhetsgenomgången är redan gjord, kapten.", "hello": "Hej kapten, det är {name}. Vad kan jag hjälpa till med?", "landing_feedback": "Ärligt talat? {verdict}", "unclear": "Förlåt, kapten, det uppfattade jag inte riktigt. Kan du upprepa?"},
-    "ru": {"ground_boarding": "Спасибо, командир. Мы готовы, начинаем посадку.", "ground_deboarding": "Спасибо, командир, выводим всех.", "ground_not_yet": "Пока это невозможно, командир.", "drink": "Конечно. {drink}, сейчас принесу.", "drink_both": "Два раза {drink}, сейчас принесу.", "drink_delivered": "Вот ваш {drink}, командир. Осторожно, горячо.", "drink_delivered_cold": "Вот ваш {drink}, командир.", "no_drink": "Без проблем. Вызовите, если передумаете.", "meal": "Конечно. Сейчас принесу еду.", "meal_delivered": "Вот ваша еда, командир. Приятного аппетита.",
+    "ru": {"ground_early": "Начинаем посадку сейчас, командир, чуть раньше плана.", "ground_hurry": "Хорошо, командир, попрошу наземную службу ускориться.", "ground_boarding": "Спасибо, командир. Мы готовы, начинаем посадку.", "ground_deboarding": "Спасибо, командир, выводим всех.", "ground_not_yet": "Пока это невозможно, командир.", "drink": "Конечно. {drink}, сейчас принесу.", "drink_both": "Два раза {drink}, сейчас принесу.", "drink_delivered": "Вот ваш {drink}, командир. Осторожно, горячо.", "drink_delivered_cold": "Вот ваш {drink}, командир.", "no_drink": "Без проблем. Вызовите, если передумаете.", "meal": "Конечно. Сейчас принесу еду.", "meal_delivered": "Вот ваша еда, командир. Приятного аппетита.",
            "boarding_left": "Посадки осталось примерно {left} минут, командир.", "on_time": "Пока идём по графику, командир.", "behind": "Отстаём от плана на {minutes} минут, командир.", "no_schedule": "У меня нет подходящего времени вылета на сегодня, командир.", "status": "Здесь всё хорошо. Пассажиров: {pax}, всё спокойно.", "count": "Сегодня на борту пассажиров: {pax}.", "prepare_landing": "Хорошо. Сообщу, когда салон будет готов.", "prepare_takeoff": "Поняла. Сообщу, когда будем готовы.", "already_secure": "Салон уже готов, командир.",
            "turbulence": "Спасибо за предупреждение. Сделаю объявление, и мы остановим обслуживание.", "delay": "Поняла. Сообщу пассажирам.", "relay": "Хорошо.", "thanks": "Пожалуйста!", "who": "Это {name}, сегодня старший бортпроводник.", "service_start": "Хорошо, начинаем обслуживание.", "safety_done": "Инструктаж по безопасности уже проведён, командир.", "hello": "Здравствуйте, командир, это {name}. Чем могу помочь?", "landing_feedback": "Честно? {verdict}", "unclear": "Простите, командир, я не расслышала. Можете повторить?"},
-    "zh": {"ground_boarding": "谢谢机长。我们准备好了，开始登机。", "ground_deboarding": "谢谢机长，我们安排大家下机。", "ground_not_yet": "机长，现在还不行。", "drink": "好的。{drink}马上来。", "drink_both": "两份{drink}，马上来。", "drink_delivered": "机长，您的{drink}。小心烫。", "drink_delivered_cold": "机长，您的{drink}。", "no_drink": "没问题。需要的话随时叫我。", "meal": "好的。我马上把餐送过来。", "meal_delivered": "机长，您的餐来了。请慢用。",
+    "zh": {"ground_early": "机长，现在开始登机，比计划稍早一些。", "ground_hurry": "好的机长，我让地勤加快速度。", "ground_boarding": "谢谢机长。我们准备好了，开始登机。", "ground_deboarding": "谢谢机长，我们安排大家下机。", "ground_not_yet": "机长，现在还不行。", "drink": "好的。{drink}马上来。", "drink_both": "两份{drink}，马上来。", "drink_delivered": "机长，您的{drink}。小心烫。", "drink_delivered_cold": "机长，您的{drink}。", "no_drink": "没问题。需要的话随时叫我。", "meal": "好的。我马上把餐送过来。", "meal_delivered": "机长，您的餐来了。请慢用。",
            "boarding_left": "机长，登机还要大约{left}分钟。", "on_time": "机长，目前我们是准时的。", "behind": "机长，我们比计划晚了{minutes}分钟。", "no_schedule": "机长，我这里没有今天有效的起飞时间。", "status": "后面一切都好。{pax}位乘客，很平静。", "count": "今天机上有{pax}位乘客。", "prepare_landing": "好的。客舱准备好后我通知您。", "prepare_takeoff": "明白。准备好后我告诉您。", "already_secure": "机长，客舱已经准备好了。",
            "turbulence": "谢谢提醒。我会广播，并暂停服务。", "delay": "明白。我会告诉乘客。", "relay": "好的。", "thanks": "不客气！", "who": "我是{name}，今天的乘务长。", "service_start": "好的，我们现在开始服务。", "safety_done": "机长，安全演示已经做过了。", "hello": "机长您好，我是{name}。有什么可以帮您？", "landing_feedback": "说实话？{verdict}", "unclear": "对不起机长，我没听清楚。请再说一遍？"},
 }
@@ -107,6 +107,15 @@ def _phrases(code: str) -> list[tuple[str, str]]:
     return _CACHE[code]
 
 
+_KNOWN: dict[str, set[str]] = {}
+
+
+def _known(code: str) -> set[str]:
+    if code not in _KNOWN:
+        _KNOWN[code] = {w for said in HEARD[code].values() for phrase in said.split("|") for w in plain(phrase).split()}
+    return _KNOWN[code]
+
+
 def as_english(text: str, code: str) -> str:
     """``text`` said in language ``code``, with what the cabin crew knows of it in the English their script reads."""
     if code not in HEARD or not text.strip():
@@ -116,7 +125,9 @@ def as_english(text: str, code: str) -> str:
         for words, english in _phrases(code):
             said = said.replace(words, f" {english} ")
         return " ".join(said.split())
-    said = f" {' '.join(plain(text).replace('.', ' ').replace(',', ' ').split())} "
+    said = plain(text)
+    said = near_words(said, _known(code), strict=False) or said  # (a word Whisper wrote a letter or two off)
+    said = f" {' '.join(said.replace('.', ' ').replace(',', ' ').split())} "
     for words, english in _phrases(code):
         said = said.replace(f" {words} ", f" {english} ")
     return " ".join(said.split())
@@ -130,3 +141,124 @@ def drink_said(drink: str, code: str) -> str:
     for english in sorted(table, key=len, reverse=True):
         drink = drink.replace(english, table[english])
     return drink
+
+
+# The crew's own calls to the flight deck (cabin_lines.LINES), in the captain's language: written for a man, said by
+# whoever's on (foreign.said_by). "late_boarding_plain": the late boarding call with no time to go.
+CALLS: dict[str, dict[str, str]] = {
+    "de": {"boarded": "Captain, hier ist {name}. Boarding abgeschlossen, {pax} Passagiere an Bord. Die Kabine ist bereit, die Türen können geschlossen werden, sobald Sie so weit sind.",
+           "deboarded": "Captain, hier ist {name}. Alle Passagiere sind ausgestiegen. Danke für den schönen Flug.",
+           "late_boarding": "Captain, hier ist {name}. Es ist Off-Block-Zeit und wir boarden noch, etwa {left} Minuten.",
+           "late_boarding_plain": "Captain, hier ist {name}. Es ist Off-Block-Zeit und wir boarden noch.",
+           "late_not_boarding": "Captain, hier ist {name}. In {minutes} Minuten ist Off-Block und das Boarding hat noch nicht begonnen. Sollen wir anfangen?",
+           "late_ready": "Captain, hier ist {name}. Wir sind {minutes} Minuten hinter der Off-Block-Zeit. Die Kabine ist bereit, sobald Sie es sind.",
+           "secure_takeoff": "Captain, hier ist {name}. Die Kabine ist für den Start gesichert.",
+           "secure_landing": "Captain, hier ist {name}. Die Kabine ist für die Landung gesichert.",
+           "service_call": "Captain, hier ist {name}. Wir beginnen gleich mit dem Service. Kann ich Ihnen etwas bringen?"},
+    "fr": {"boarded": "Commandant, c'est {name}. L'embarquement est terminé, {pax} passagers à bord. La cabine est prête, on peut fermer les portes quand vous voulez.",
+           "deboarded": "Commandant, c'est {name}. Tous les passagers sont descendus. Merci pour ce beau vol.",
+           "late_boarding": "Commandant, c'est {name}. C'est l'heure du départ et nous embarquons encore, environ {left} minutes.",
+           "late_boarding_plain": "Commandant, c'est {name}. C'est l'heure du départ et nous embarquons encore.",
+           "late_not_boarding": "Commandant, c'est {name}. Le départ est dans {minutes} minutes et l'embarquement n'a pas commencé. On commence ?",
+           "late_ready": "Commandant, c'est {name}. Nous avons {minutes} minutes de retard. La cabine est prête quand vous voulez.",
+           "secure_takeoff": "Commandant, c'est {name}. La cabine est prête pour le décollage.",
+           "secure_landing": "Commandant, c'est {name}. La cabine est prête pour l'atterrissage.",
+           "service_call": "Commandant, c'est {name}. Nous allons commencer le service. Je vous apporte quelque chose ?"},
+    "es": {"boarded": "Comandante, soy {name}. Embarque completado, {pax} pasajeros a bordo. La cabina está lista, podemos cerrar puertas cuando quiera.",
+           "deboarded": "Comandante, soy {name}. Ya han desembarcado todos los pasajeros. Gracias por el vuelo.",
+           "late_boarding": "Comandante, soy {name}. Ya es la hora de calzos fuera y seguimos embarcando, unos {left} minutos más.",
+           "late_boarding_plain": "Comandante, soy {name}. Ya es la hora de calzos fuera y seguimos embarcando.",
+           "late_not_boarding": "Comandante, soy {name}. Faltan {minutes} minutos para calzos fuera y el embarque no ha empezado. ¿Empezamos?",
+           "late_ready": "Comandante, soy {name}. Llevamos {minutes} minutos de retraso. La cabina está lista cuando usted quiera.",
+           "secure_takeoff": "Comandante, soy {name}. Cabina asegurada para el despegue.",
+           "secure_landing": "Comandante, soy {name}. Cabina asegurada para el aterrizaje.",
+           "service_call": "Comandante, soy {name}. Vamos a empezar el servicio. ¿Le traigo algo?"},
+    "it": {"boarded": "Comandante, sono {name}. Imbarco completato, {pax} passeggeri a bordo. La cabina è pronta, possiamo chiudere le porte quando vuole.",
+           "deboarded": "Comandante, sono {name}. Tutti i passeggeri sono scesi. Grazie per il bel volo.",
+           "late_boarding": "Comandante, sono {name}. È l'orario di partenza e stiamo ancora imbarcando, circa {left} minuti.",
+           "late_boarding_plain": "Comandante, sono {name}. È l'orario di partenza e stiamo ancora imbarcando.",
+           "late_not_boarding": "Comandante, sono {name}. Mancano {minutes} minuti alla partenza e l'imbarco non è iniziato. Cominciamo?",
+           "late_ready": "Comandante, sono {name}. Siamo in ritardo di {minutes} minuti. La cabina è pronta quando vuole.",
+           "secure_takeoff": "Comandante, sono {name}. Cabina pronta per il decollo.",
+           "secure_landing": "Comandante, sono {name}. Cabina pronta per l'atterraggio.",
+           "service_call": "Comandante, sono {name}. Stiamo per iniziare il servizio. Le porto qualcosa?"},
+    "pt": {"boarded": "Comandante, é {name}. Embarque concluído, {pax} passageiros a bordo. A cabine está pronta, podemos fechar as portas quando quiser.",
+           "deboarded": "Comandante, é {name}. Todos os passageiros já saíram. Obrigado pelo voo.",
+           "late_boarding": "Comandante, é {name}. Já é a hora de saída e ainda estamos a embarcar, cerca de {left} minutos.",
+           "late_boarding_plain": "Comandante, é {name}. Já é a hora de saída e ainda estamos a embarcar.",
+           "late_not_boarding": "Comandante, é {name}. Faltam {minutes} minutos para a saída e o embarque ainda não começou. Começamos?",
+           "late_ready": "Comandante, é {name}. Estamos {minutes} minutos atrasados. A cabine está pronta quando quiser.",
+           "secure_takeoff": "Comandante, é {name}. Cabine segura para a descolagem.",
+           "secure_landing": "Comandante, é {name}. Cabine segura para a aterragem.",
+           "service_call": "Comandante, é {name}. Vamos começar o serviço. Quer que lhe traga alguma coisa?"},
+    "nl": {"boarded": "Captain, met {name}. Het boarden is klaar, {pax} passagiers aan boord. De cabine is klaar, de deuren kunnen dicht wanneer je wilt.",
+           "deboarded": "Captain, met {name}. Alle passagiers zijn uitgestapt. Bedankt voor de fijne vlucht.",
+           "late_boarding": "Captain, met {name}. Het is vertrektijd en we zijn nog aan het boarden, nog ongeveer {left} minuten.",
+           "late_boarding_plain": "Captain, met {name}. Het is vertrektijd en we zijn nog aan het boarden.",
+           "late_not_boarding": "Captain, met {name}. Over {minutes} minuten is het vertrektijd en het boarden is nog niet begonnen. Zullen we beginnen?",
+           "late_ready": "Captain, met {name}. We lopen {minutes} minuten achter. De cabine is klaar wanneer jij het bent.",
+           "secure_takeoff": "Captain, met {name}. De cabine is klaar voor de start.",
+           "secure_landing": "Captain, met {name}. De cabine is klaar voor de landing.",
+           "service_call": "Captain, met {name}. We beginnen zo met de service. Kan ik je iets brengen?"},
+    "pl": {"boarded": "Kapitanie, tu {name}. Boarding zakończony, pasażerów na pokładzie: {pax}. Kabina gotowa, możemy zamknąć drzwi, kiedy pan zechce.",
+           "deboarded": "Kapitanie, tu {name}. Wszyscy pasażerowie wysiedli. Dziękuję za lot.",
+           "late_boarding": "Kapitanie, tu {name}. Minęła już godzina odlotu, a boarding jeszcze trwa, jeszcze około {left} minut.",
+           "late_boarding_plain": "Kapitanie, tu {name}. Minęła już godzina odlotu, a boarding jeszcze trwa.",
+           "late_not_boarding": "Kapitanie, tu {name}. Odlot za {minutes} minut, a boarding jeszcze się nie zaczął. Zaczynamy?",
+           "late_ready": "Kapitanie, tu {name}. Mamy {minutes} minut opóźnienia. Kabina jest gotowa, kiedy pan zechce.",
+           "secure_takeoff": "Kapitanie, tu {name}. Kabina zabezpieczona do startu.",
+           "secure_landing": "Kapitanie, tu {name}. Kabina zabezpieczona do lądowania.",
+           "service_call": "Kapitanie, tu {name}. Zaraz zaczynamy serwis. Czy coś panu przynieść?"},
+    "sv": {"boarded": "Kapten, det är {name}. Boardingen är klar, {pax} passagerare ombord. Kabinen är klar, dörrarna kan stängas när du vill.",
+           "deboarded": "Kapten, det är {name}. Alla passagerare har gått av. Tack för en fin flygning.",
+           "late_boarding": "Kapten, det är {name}. Det är avgångstid och vi boardar fortfarande, ungefär {left} minuter kvar.",
+           "late_boarding_plain": "Kapten, det är {name}. Det är avgångstid och vi boardar fortfarande.",
+           "late_not_boarding": "Kapten, det är {name}. Det är {minutes} minuter till avgång och boardingen har inte börjat. Ska vi börja?",
+           "late_ready": "Kapten, det är {name}. Vi är {minutes} minuter sena. Kabinen är klar när du är.",
+           "secure_takeoff": "Kapten, det är {name}. Kabinen är klar för start.",
+           "secure_landing": "Kapten, det är {name}. Kabinen är klar för landning.",
+           "service_call": "Kapten, det är {name}. Vi börjar servicen strax. Kan jag ta med något till dig?"},
+    "ru": {"boarded": "Командир, это {name}. Посадка закончена, пассажиров на борту: {pax}. Салон готов, двери можно закрывать, когда скажете.",
+           "deboarded": "Командир, это {name}. Все пассажиры вышли. Спасибо за полёт.",
+           "late_boarding": "Командир, это {name}. Время вылета уже наступило, а посадка ещё идёт, примерно {left} минут.",
+           "late_boarding_plain": "Командир, это {name}. Время вылета уже наступило, а посадка ещё идёт.",
+           "late_not_boarding": "Командир, это {name}. До вылета {minutes} минут, а посадка ещё не началась. Начинаем?",
+           "late_ready": "Командир, это {name}. Мы опаздываем на {minutes} минут. Салон готов, когда будете готовы вы.",
+           "secure_takeoff": "Командир, это {name}. Салон к взлёту готов.",
+           "secure_landing": "Командир, это {name}. Салон к посадке готов.",
+           "service_call": "Командир, это {name}. Мы начинаем обслуживание. Вам что-нибудь принести?"},
+    "zh": {"boarded": "机长，我是{name}。登机完毕，机上共有{pax}位乘客。客舱已准备好，您准备好就可以关门。",
+           "deboarded": "机长，我是{name}。乘客已全部下机。谢谢您这次飞行。",
+           "late_boarding": "机长，我是{name}。已经到了起飞时间，我们还在登机，大约还要{left}分钟。",
+           "late_boarding_plain": "机长，我是{name}。已经到了起飞时间，我们还在登机。",
+           "late_not_boarding": "机长，我是{name}。离起飞还有{minutes}分钟，登机还没开始。要开始吗？",
+           "late_ready": "机长，我是{name}。我们已经晚了{minutes}分钟。客舱准备好了，听您安排。",
+           "secure_takeoff": "机长，我是{name}。客舱已为起飞做好准备。",
+           "secure_landing": "机长，我是{name}。客舱已为着陆做好准备。",
+           "service_call": "机长，我是{name}。我们马上开始服务。需要给您带点什么吗？"},
+}
+
+# Minutes with their number as Polish and Russian have them ("2 minuty", "5 minut", "21 минута").
+_MINUTES = {"pl": (r"minut[ay]?", ("minuta", "minuty", "minut")), "ru": (r"минут[аы]?", ("минута", "минуты", "минут"))}
+
+
+def counted(text: str, code: str) -> str:
+    """The minutes in ``text`` agreeing with their number."""
+    if code not in _MINUTES:
+        return text
+    from localtc.crew.foreign import _form
+
+    pattern, forms = _MINUTES[code]
+    return re.sub(rf"\b(\d+) {pattern}(?!\w)", lambda m: f"{m[1]} {_form(int(m[1]), *forms, code)}", text)
+
+
+def _decisions() -> None:
+    """What the captain decides about a problem on board, in their language (cabin_incident_words.DECISIONS)."""
+    from localtc.crew.cabin_incident_words import DECISIONS
+
+    for code, said in DECISIONS.items():
+        for english, words in said.items():
+            HEARD.setdefault(code, {})[english] = "|".join(filter(None, (HEARD.get(code, {}).get(english, ""), words)))
+
+
+_decisions()

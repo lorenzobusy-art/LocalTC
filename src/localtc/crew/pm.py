@@ -54,6 +54,7 @@ from localtc.sim_api import (
     AircraftVars,
     AtcTransmission,
     CopilotEvent,
+    GroundStatus,
     CrewAction,
     CrewSpeech,
     IntercomHeard,
@@ -216,6 +217,7 @@ class PilotMonitoring:
         self.monitor.personality = self.personality
         self.monitor.checklist_mode = s["checklist_mode"]
         self.monitor.cabin_on_schedule = lambda: getattr(self, "cabin_on_schedule", lambda: False)()
+        self.monitor.turnaround_of = self.picture.turnaround_of = lambda: getattr(self, "turnaround", None)
         self.monitor.set_checklists(getattr(self, "_book", None))
         self._waiting: list[_Waiting] = []
         self.intent: Intent | None = None
@@ -319,6 +321,8 @@ class PilotMonitoring:
                 self.cockpit.systems = self._as_read(self._raw_systems)
                 self.monitor.observe(self.cockpit.systems)  # the monitor sees the switches move too
             self.cockpit.watch()
+        elif isinstance(ev, GroundStatus):
+            self.monitor.gsx = ev.provider == "gsx" and ev.connected  # (the push's brake calls are the ramp's then)
         elif isinstance(ev, PhaseChanged):
             self._note(ev.t, f"phase now {ev.phase.lower().replace('_', ' ')}")
         elif isinstance(ev, AircraftIdentity):
@@ -483,11 +487,16 @@ class PilotMonitoring:
         self._heard_n += 1
         said_as = text
         english = foreign.gloss(text, self.language) if self.language else None
+        confidence = ev.confidence
+        if english is None and self.language and (english := foreign.gloss_near(text, self.language)) is not None:
+            # Whisper a letter or two off ("Inserici il pilota automatico"): read, and asked back ("Did you say autopilot
+            # on?"), never just done.
+            confidence = min(confidence if confidence is not None else 1.0, speech_acts.UNSURE - 0.05)
         if english is not None:  # "Fahrwerk ausfahren": read as "gear down", as the grammar knows it
             text = english
         # ("Full flaps please" wasn't a command, and answered the checklist's item instead.)
         text = re.sub(r"\bfull flaps\b", "flaps full", text, flags=re.I)
-        reading = speech_acts.read(text, ev.confidence, radio_call=self._radio_call(text))
+        reading = speech_acts.read(text, confidence, radio_call=self._radio_call(text))
         own = self.cockpit.own
         if own is not None and own.on_ground and any(c.action == "go_around" for c in reading.commands):
             # "...just going around on different airlines": on the ground there's nothing to go around from ("Going
@@ -1224,6 +1233,12 @@ class PilotMonitoring:
             words = re.findall(r"[\w'/]+", p.done)
             if words:
                 text = re.sub(r"[\s,]*".join(re.escape(w) for w in words) + r"[.!]?", "", text, flags=re.I).strip(" ,.")
+            if p.action == "altitude":
+                # However the altitude was put ("initial FL090" for the plan's "9,000"): "Squawk 2103, initial FL090
+                # set. I couldn't set 9,000" said it had and hadn't.
+                text = re.sub(r"[\s,]*(?:initial\s+)?(?:FL\s?\d{2,3}|\d{1,2},\d{3}(?:\s+feet)?|\d{4,5}\s+feet)(?=[\s,.!]|$)", "", text,
+                              flags=re.I).strip(" ,.")
+                text = "" if text.lower() in ("set", "") else re.sub(r",\s*set$", " set", text, flags=re.I)
             text = f"{text}." if text and text[-1] not in ".!?" else text
             spoken = ""
         asks = [_ask_pilot(p, p.done.rstrip(".").replace(" set", "")) for p in held.failed
@@ -1283,6 +1298,8 @@ class PilotMonitoring:
         lowered = text.lower()
         if ASK_ATC.search(" ".join(lowered.split())):
             return False
+        if "checklist" in lowered or "check list" in lowered:
+            return False  # "Descent and approach checklist please": "approach" there is the checklist's, not a station
         stations = [f.station.lower() for f in getattr(self.engine, "facilities", [])] if self.engine is not None else []
         if any(s and s in lowered for s in stations):
             return True
@@ -1322,7 +1339,7 @@ class PilotMonitoring:
                 # own words in the language with some English in them, in that language's voice.
                 done.append(o if o.language == lang and foreign.mostly(o.text, lang) else replace(o, language=""))
                 continue
-            line = replace(o, text=text, spoken="", language=lang)
+            line = replace(o, text=foreign.said_by(text, lang, "F" if self.voice_sex == "female" else "M"), spoken="", language=lang)
             if self._last_line is o:
                 self._last_line = line
             done.append(line)
@@ -1331,7 +1348,9 @@ class PilotMonitoring:
     def _say(self, t: float, text: str, kind: str = "reply", spoken: str = "", language: str = "") -> CrewSpeech:
         if language:  # the model's words in the pilot's language: as they are, in a voice of that language
             return self._line(CrewSpeech(t=t, text=text, spoken=spoken, kind=kind, language=language))
-        if not self.personality.neutral and kind == "reply":  # their "check", and their own way of talking
+        if not self.personality.neutral and kind == "reply" and not self.language:
+            # Their "check", and their own way of talking. (In English: in the captain's language their set lines are said
+            # as the language has them, "um" and "yep" not being its words.)
             said = personalities.ack(self.personality, self.monitor.rng) if text in ("Check.", "Copy.") else                 personalities.chat(self.personality, text, self.monitor.rng)
             if said != text:
                 text, spoken = said, ""

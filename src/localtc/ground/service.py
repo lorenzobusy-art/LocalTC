@@ -11,7 +11,7 @@ import msgspec
 
 from localtc.bus import EventBus
 from localtc.ground.api import GroundAdapter
-from localtc.ground.crew import Close, Open, Pick, RampCrew, SelectGate, Send
+from localtc.ground.crew import Close, Open, Pick, RampCrew, SelectGate, Send, SlowDown, SpeedUp
 from localtc.ground.model import RampModel
 from localtc.sim_api import (
     AircraftVars,
@@ -152,6 +152,17 @@ class GroundService:
 
     async def _in_own_words(self, text: str, outputs: list[Any], t: float) -> list[Any]:
         said: list[Any] = []
+        if self.model is not None:
+            # One answer to one call: "catering and water" was answered twice, a line for each, each in the model's words.
+            merged: list[Any] = []
+            for output in outputs:
+                last = merged[-1] if merged else None
+                if isinstance(output, RampSpeech) and isinstance(last, RampSpeech) and last.channel == output.channel \
+                        and not self._keeps_its_words(output.text) and not self._keeps_its_words(last.text):
+                    merged[-1] = msgspec.structs.replace(last, text=f"{last.text} {output.text}", spoken="")
+                else:
+                    merged.append(output)
+            outputs = merged
         for output in outputs:
             if isinstance(output, RampSpeech) and self.model is not None and not self._keeps_its_words(output.text):
                 words, records = await asyncio.to_thread(self.model.word, text, output.text, t)
@@ -230,6 +241,13 @@ class GroundService:
             elif isinstance(output, SelectGate):
                 result = await self.adapter.select_gate(output.gate)
                 log.info("Ground crew told GSX the stand is %s: %s", output.gate, result.code or "ok")
+            elif isinstance(output, SpeedUp):
+                result = await self.adapter.speed_up(output.service)
+                log.info("Ground crew hurried %s: %s", output.service, result.code or "ok")
+                await self._out(self.crew.hurried(output.service, result.ok, self._now()))
+            elif isinstance(output, SlowDown):
+                result = await self.adapter.slow_down(output.service)
+                log.info("Ground crew put %s's pace back: %s", output.service, result.code or "ok")
             elif isinstance(output, Pick):
                 result = await self.adapter.pick(output.index)
                 log.info("Ground crew picked %r: %s", output.label, result.code or "ok")

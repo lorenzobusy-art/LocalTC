@@ -173,11 +173,11 @@ class AtcConfig(_Section):
     traffic_runways: bool = True
     real_gates: bool = True  # the airports' real gate names and international gates, from OpenStreetMap
     # VATSIM/IVAO controller integration: on, each flight is flown with "local" (LocalTC's ATC alone), "vatsim" or
-    # "ivao" (online_network, chosen on the ATC tab before the flight starts: "" not chosen yet). With a network, its
+    # "ivao" (online_network, on the ATC tab: Only LocalTC unless another is chosen). With a network, its
     # controllers around the route are looked up each minute, the copilot says when one covers the airspace, and
     # LocalTC's ATC is quiet while COM1 is on one of theirs; it takes the flight back where none is.
     online_integration: bool = False
-    online_network: Literal["", "local", "vatsim", "ivao"] = ""
+    online_network: Literal["", "local", "vatsim", "ivao"] = "local"  # ("": from an earlier version, the same as "local")
     # How ATC says (and hears) a callsign, by its ident, written by the pilot on the ATC tab: {"VND1128": "ita arrow 1128"}.
     spoken_callsigns: dict[str, str] = {}
     callsign_check: bool = True  # another aircraft's callsign heard (or one digit off on a new call): "say again your callsign"
@@ -444,6 +444,7 @@ class CabinConfig(_Section):
     interphone: bool = True  # the crew call the flight deck: boarding complete, cabin secure, the service
     show_log: bool = True  # their words in the radio log (off: only heard)
     captain: str = ""  # your name, for the welcome ("on behalf of Captain Reyes"); blank: "the captain"
+    incidents: Literal["off", "rare", "normal", "frequent"] = "off"  # problems in the cabin for you to decide on
     # How much they lean on the language model, a cloud one only (without one, the script's words): scripted, semi (only
     # what the script can't answer), mostly_llm (their answers and longer announcements), llm (all but the safety ones).
     llm: Literal["scripted", "semi", "mostly_llm", "llm"] = "mostly_llm"
@@ -460,6 +461,14 @@ class GroundConfig(_Section):
     llm: Literal["scripted", "semi", "mostly_llm", "llm"] = "mostly_llm"
     wait_for_clearance: bool = True  # the push waits for ATC, when there's a controller who'd clear it
     adapter: Literal["auto", "gsx", "standalone", "mock"] = "auto"  # who does the work (mock: a stand-in, for working without a sim)
+
+
+class TurnaroundConfig(_Section):
+    """The turnaround as a timeline (turnaround_plan.py): the milestones, what each waits on, and the off-block time."""
+
+    # off; advisory: the times, the reasons and the copilot's reminders; realistic: and services keep to their slots.
+    mode: Literal["off", "advisory", "realistic"] = "realistic"
+    profile: Literal["auto", "full_service", "low_cost", "regional", "cargo"] = "auto"  # auto: from the airline
 
 
 class SessionConfig(_Section):
@@ -479,6 +488,7 @@ class UiConfig(_Section):
     dev_mode: bool = False  # record every flight (with audio) and show the tools for sending one in
     discord: bool = False  # the flight and its frequency on the pilot's Discord profile (discord_rpc.py)
     port: int = 0  # 0 = any free port on 127.0.0.1
+    panel_port: int = 47810  # the sim's toolbar panel (VR) reads LocalTC here; 0: no panel server
     window: bool = True  # a window of its own (pywebview); false = the default browser
     simbrief_user: str = ""  # SimBrief username or pilot ID, remembered for "New flight"
     # A flight starts with its plan ("New Flight": the plan, then the flight). Off: Start flies without one, and "File
@@ -529,6 +539,7 @@ class Config(_Section):
     crew: CrewConfig = msgspec.field(default_factory=CrewConfig)
     cabin: CabinConfig = msgspec.field(default_factory=CabinConfig)
     ground: GroundConfig = msgspec.field(default_factory=GroundConfig)
+    turnaround: TurnaroundConfig = msgspec.field(default_factory=TurnaroundConfig)
     voice: VoiceConfig = msgspec.field(default_factory=VoiceConfig)
     tts: TtsConfig = msgspec.field(default_factory=TtsConfig)
     mixer: MixerConfig = msgspec.field(default_factory=MixerConfig)
